@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node
+node_modules/
+package-lock.json
+
+# Runtime / generated
+*.bak
+logs/
+*.log
+
+# Env / secrets
+.env
+*.env
+secrets/
+*.key
+*.pem
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
