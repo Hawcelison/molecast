@@ -90,6 +90,24 @@
     byId("geometry-map-status").textContent = message;
   }
 
+  function setEditorMessage(message, type) {
+    const element = byId("editor-form-message");
+    if (!element) {
+      return;
+    }
+    element.textContent = message || "";
+    element.classList.remove(
+      "is-visible",
+      "editor-form-message--error",
+      "editor-form-message--success",
+      "editor-form-message--warning",
+    );
+    if (!message) {
+      return;
+    }
+    element.classList.add("is-visible", `editor-form-message--${type || "error"}`);
+  }
+
   function formatUtc(date) {
     return date.toISOString().replace(/\.\d{3}Z$/, "Z");
   }
@@ -134,7 +152,7 @@
       return value;
     }
     if (!utcPattern.test(value) || Number.isNaN(new Date(value).getTime())) {
-      throw new Error(`${label} must be UTC ISO format ending in Z, like 2026-04-27T16:28:53Z.`);
+      throw new Error(`Invalid timestamp: ${label} must be UTC ISO format ending in Z.`);
     }
     return value;
   }
@@ -159,7 +177,7 @@
     }
     const ring = geometry.coordinates[0];
     if (!Array.isArray(ring) || ring.length < 4) {
-      throw new Error("Geometry Polygon must include at least four [longitude, latitude] positions.");
+      throw new Error("Invalid geometry: polygon needs at least 3 points.");
     }
     ring.forEach(function (position) {
       if (!Array.isArray(position) || position.length < 2) {
@@ -167,14 +185,23 @@
       }
       const lon = Number(position[0]);
       const lat = Number(position[1]);
-      if (!Number.isFinite(lon) || lon < -180 || lon > 180 || !Number.isFinite(lat) || lat < -90 || lat > 90) {
-        throw new Error("Geometry coordinates must be valid longitude/latitude values.");
+      if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
+        throw new Error("Invalid longitude.");
+      }
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+        throw new Error("Invalid latitude.");
       }
     });
     const first = ring[0];
     const last = ring[ring.length - 1];
     if (first[0] !== last[0] || first[1] !== last[1]) {
       throw new Error("Geometry Polygon ring must be closed.");
+    }
+    const uniquePoints = new Set(ring.slice(0, -1).map(function (position) {
+      return `${Number(position[0])},${Number(position[1])}`;
+    }));
+    if (uniquePoints.size < 3) {
+      throw new Error("Invalid geometry: polygon needs at least 3 points.");
     }
     return geometry;
   }
@@ -198,19 +225,20 @@
       if (!alert || typeof alert !== "object" || Array.isArray(alert)) {
         throw new Error(`Alert at index ${index} must be an object.`);
       }
-      if (!alert.id || typeof alert.id !== "string") {
-        throw new Error(`Alert at index ${index} must include id.`);
+      alert.source = alert.source || "test";
+      if (!alert.id || typeof alert.id !== "string" || !alert.id.trim()) {
+        throw new Error("Missing required field: id");
       }
-      if (!alert.event || typeof alert.event !== "string") {
-        throw new Error(`Alert ${alert.id} must include event.`);
+      if (!alert.event || typeof alert.event !== "string" || !alert.event.trim()) {
+        throw new Error("Missing required field: event");
       }
       if (typeof alert.enabled !== "boolean") {
         throw new Error(`Alert ${alert.id} enabled must be true or false.`);
       }
       const effectiveAt = parseUtcRequired(alert.effective || "", `Alert ${alert.id} effective`);
       const expiresAt = parseUtcRequired(alert.expires || "", `Alert ${alert.id} expires`);
-      if (expiresAt <= effectiveAt) {
-        throw new Error(`Alert ${alert.id} expires must be after effective.`);
+      if (expiresAt <= effectiveAt && !(alert.enabled === false && expiresAt <= new Date())) {
+        throw new Error("Invalid timestamp: expires must be after effective.");
       }
       if (!severityValues.includes(alert.severity)) {
         throw new Error(`Alert ${alert.id} severity must be a supported value.`);
@@ -221,14 +249,10 @@
       if (!certaintyValues.includes(alert.certainty)) {
         throw new Error(`Alert ${alert.id} certainty must be a supported value.`);
       }
-      if (!alert.areaDesc || typeof alert.areaDesc !== "string" || !alert.areaDesc.trim()) {
-        throw new Error(`Alert ${alert.id} areaDesc must not be blank.`);
-      }
       validateGeometry(alert.geometry ?? null);
       if (alert.parameters !== null && alert.parameters !== undefined && (typeof alert.parameters !== "object" || Array.isArray(alert.parameters))) {
         throw new Error(`Alert ${alert.id} parameters must be an object or empty.`);
       }
-      alert.source = alert.source || "test";
     });
   }
 
@@ -653,10 +677,10 @@
     const lon = Number.parseFloat(byId("geometry-center-lon").value);
     const halfWidth = Number.parseFloat(byId("geometry-half-width").value);
     if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
-      throw new Error("Center latitude must be between -90 and 90.");
+      throw new Error("Invalid latitude.");
     }
     if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
-      throw new Error("Center longitude must be between -180 and 180.");
+      throw new Error("Invalid longitude.");
     }
     if (!Number.isFinite(halfWidth) || halfWidth <= 0) {
       throw new Error("Half-width miles must be greater than 0.");
@@ -679,10 +703,27 @@
     suppressGeometryFieldInput = true;
     byId("field-geometry").value = prettyJson(geometry);
     suppressGeometryFieldInput = false;
-    renderSelectedGeometryOnMap(false);
-    syncVertexMarkers(geometry);
+  }
+
+  function commitGeometryState(geometry, statusMessage, options) {
+    const shouldSyncMarkers = !options || options.syncMarkers !== false;
+    validateGeometry(geometry);
+    setGeometryField(geometry, statusMessage);
+    if (payload && Array.isArray(payload.alerts) && selectedIndex >= 0 && payload.alerts[selectedIndex]) {
+      payload.alerts[selectedIndex].geometry = geometry;
+    }
+    if (!geometry) {
+      geometryDrawPoints = [];
+      geometryEditEnabled = false;
+      byId("edit-polygon").classList.remove("is-active");
+    }
+    renderSelectedGeometryOnMap(geometry, false);
+    if (shouldSyncMarkers) {
+      syncVertexMarkers(geometry);
+    }
     if (geometry && validateGeometryForUi(geometry) && statusMessage) {
       setGeometryStatus(statusMessage);
+      setEditorMessage("Geometry updated", "success");
     }
   }
 
@@ -691,9 +732,22 @@
       return;
     }
     try {
-      setGeometryField(buildRectangleGeometry(), "Rectangle preview updated.");
+      commitGeometryState(buildRectangleGeometry(), "Rectangle preview updated.");
     } catch (error) {
-      setGeometryStatus(error.message || "Invalid rectangle geometry.");
+      const message = error.message || "Invalid rectangle geometry.";
+      setGeometryStatus(message);
+      setEditorMessage(message, "error");
+    }
+  }
+
+  function validateGeometryControlsBeforeSave() {
+    if (byId("geometry-shape-type").value === "rectangle" || geometryMode === "rectangle") {
+      const hasRectangleInput = ["geometry-center-lat", "geometry-center-lon"].some(function (id) {
+        return byId(id).value.trim();
+      });
+      if (hasRectangleInput) {
+        buildRectangleGeometry();
+      }
     }
   }
 
@@ -791,10 +845,7 @@
           nextPoints[index] = [lngLat.lng, lngLat.lat];
           try {
             const nextGeometry = polygonFromPoints(nextPoints);
-            suppressGeometryFieldInput = true;
-            byId("field-geometry").value = prettyJson(nextGeometry);
-            suppressGeometryFieldInput = false;
-            renderGeometryOnMap(nextGeometry, byId("field-event")?.value || "", false);
+            commitGeometryState(nextGeometry, "", { syncMarkers: false });
             validateGeometryForUi(nextGeometry);
           } catch (error) {
             setGeometryStatus(error.message || "Invalid polygon.");
@@ -885,11 +936,9 @@
     }
   }
 
-  function renderSelectedGeometryOnMap(fitBounds) {
+  function renderSelectedGeometryOnMap(geometry, fitBounds) {
     const eventName = byId("field-event")?.value || currentAlerts()[selectedIndex]?.event || "";
-    const geometry = readCurrentGeometryForMap();
     renderGeometryOnMap(geometry, eventName, fitBounds !== false);
-    syncVertexMarkers(geometry);
   }
 
   function getTargetCenter() {
@@ -959,7 +1008,7 @@
     }
     try {
       const geometry = polygonFromPoints(geometryDrawPoints);
-      setGeometryField(geometry, "Polygon drawing updated.");
+      commitGeometryState(geometry, "Polygon drawing updated.");
     } catch (error) {
       setGeometryStatus(error.message || "Invalid polygon.");
     }
@@ -1010,7 +1059,7 @@
     });
     geometryMap.on("load", function () {
       geometryMapLoaded = true;
-      renderSelectedGeometryOnMap(false);
+      renderSelectedGeometryOnMap(readCurrentGeometryForMap(), false);
     });
     geometryMap.on("error", function (event) {
       const message = event && event.error && event.error.message ? event.error.message : "Map error";
@@ -1052,13 +1101,15 @@
     geometryEditEnabled = false;
     geometryDrawPoints = [];
     setGeometryMode("draw");
-    setGeometryField(null, "");
+    commitGeometryState(null);
     setGeometryStatus("Draw polygon: click at least three points on the map.");
   }
 
   function togglePolygonEditing() {
     const geometry = readCurrentGeometryForMap();
     if (!geometry) {
+      geometryEditEnabled = false;
+      setGeometryMode("polygon");
       setGeometryStatus("Draw or load a polygon before editing.");
       return;
     }
@@ -1071,11 +1122,8 @@
   }
 
   function clearGeometry() {
-    geometryDrawPoints = [];
-    geometryEditEnabled = false;
     setGeometryMode("rectangle");
-    setGeometryField(null, "");
-    clearVertexMarkers();
+    commitGeometryState(null);
     setGeometryStatus("Geometry cleared.");
   }
 
@@ -1104,34 +1152,35 @@
     byId("edit-polygon").classList.remove("is-active");
     updateLocalTimes();
     renderTable();
-    renderSelectedGeometryOnMap();
+    renderSelectedGeometryOnMap(alert.geometry);
   }
 
   function readFormAlert() {
     const id = byId("field-id").value.trim();
     const event = byId("field-event").value.trim();
     if (!id) {
-      throw new Error("Alert id is required.");
+      throw new Error("Missing required field: id");
     }
     if (!event) {
-      throw new Error("Event is required.");
+      throw new Error("Missing required field: event");
     }
+    validateGeometryControlsBeforeSave();
     const geometry = validateGeometry(parseJsonField("field-geometry", "Geometry"));
     const parameters = syncFriendlyParametersToRaw();
     const effective = validateUtc(byId("field-effective").value.trim(), "Effective");
     const expires = validateUtc(byId("field-expires").value.trim(), "Expires");
     if (!effective) {
-      throw new Error("Effective is required.");
+      throw new Error("Missing required field: effective");
     }
     if (!expires) {
-      throw new Error("Expires is required.");
+      throw new Error("Missing required field: expires");
     }
-    if (new Date(expires) <= new Date(effective)) {
-      throw new Error("Expires must be after effective.");
+    if (new Date(expires) <= new Date(effective) && byId("field-enabled").checked) {
+      throw new Error("Invalid timestamp: expires must be after effective.");
     }
     const areaDesc = byId("field-areaDesc").value.trim();
     if (!areaDesc) {
-      throw new Error("NWS areaDesc / Counties must not be blank.");
+      setEditorMessage("Warning: areaDesc is blank; active alert matching may fall back to defaults.", "warning");
     }
     return {
       enabled: byId("field-enabled").checked,
@@ -1165,7 +1214,7 @@
     }
     currentAlerts()[selectedIndex] = updated;
     renderTable();
-    renderSelectedGeometryOnMap();
+    renderSelectedGeometryOnMap(updated.geometry);
     return updated;
   }
 
@@ -1187,7 +1236,10 @@
     const response = await fetch(url, options);
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.detail || "Request failed.");
+      const detail = Array.isArray(data.detail)
+        ? data.detail.map(function (item) { return item.msg || JSON.stringify(item); }).join("; ")
+        : data.detail;
+      throw new Error(detail || "Request failed.");
     }
     return data;
   }
@@ -1219,6 +1271,7 @@
     if (!payload) {
       return null;
     }
+    setEditorMessage("", "success");
     if (applyForm && selectedIndex >= 0) {
       applyFormToPayload();
     }
@@ -1230,6 +1283,7 @@
       body: JSON.stringify(payload),
     });
     setStatus(`Saved ${new Date(data.saved_at).toLocaleTimeString()} - active test alerts ${data.refresh.active_test_alert_count}`);
+    setEditorMessage("Saved successfully", "success");
     await loadAlerts();
     if (keepSelectedId) {
       const nextIndex = currentAlerts().findIndex(function (alert) {
@@ -1248,7 +1302,8 @@
     setStatus("Refreshing active alerts");
     const data = await fetchJson(REFRESH_URL, { method: "POST" });
     await updateStatusPanel();
-    setStatus(`Refreshed - active test alerts ${data.active_test_alert_count}`);
+    setStatus("Active alerts refreshed");
+    setEditorMessage("Active alerts refreshed", "success");
   }
 
   async function addAlert() {
@@ -1411,7 +1466,7 @@
     byId("field-effective").addEventListener("input", updateLocalTimes);
     byId("field-expires").addEventListener("input", updateLocalTimes);
     byId("field-event").addEventListener("change", function () {
-      renderSelectedGeometryOnMap(false);
+      renderSelectedGeometryOnMap(readCurrentGeometryForMap(), false);
     });
     byId("field-geometry").addEventListener("input", function () {
       if (suppressGeometryFieldInput) {
@@ -1419,9 +1474,14 @@
       }
       geometryDrawPoints = [];
       geometryEditEnabled = false;
-      renderSelectedGeometryOnMap(false);
+      const raw = byId("field-geometry")?.value.trim();
+      if (!raw) {
+        commitGeometryState(null);
+        return;
+      }
       const geometry = readCurrentGeometryForMap();
       if (geometry) {
+        commitGeometryState(geometry);
         setGeometryFriendlyFields(geometry);
         setGeometryMode(isRectangleGeometry(geometry) ? "rectangle" : "polygon");
         validateGeometryForUi(geometry);
@@ -1433,7 +1493,9 @@
   }
 
   function showError(error) {
-    setStatus(error.message || String(error));
+    const message = error.message || String(error);
+    setStatus(message);
+    setEditorMessage(message, "error");
   }
 
   document.addEventListener("DOMContentLoaded", function () {

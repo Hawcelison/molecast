@@ -33,24 +33,24 @@
         "coordinates": [
           [
             [
-              -85.706895,
-              42.186415
+              -85.641438,
+              42.280644
             ],
             [
-              -85.527312,
-              42.241385
+              -85.522666,
+              42.250637
             ],
             [
-              -85.527312,
-              42.154429
+              -85.492302,
+              42.195466
             ],
             [
-              -85.64469,
-              42.154429
+              -85.609756,
+              42.195466
             ],
             [
-              -85.706895,
-              42.186415
+              -85.641438,
+              42.280644
             ]
           ]
         ]
@@ -92,19 +92,51 @@
       "source": "test"
     },
     {
-      "enabled": false,
+      "enabled": true,
       "id": "test-tornado-watch-49002",
+      "source": "test",
       "event": "Tornado Watch",
       "severity": "Severe",
       "urgency": "Future",
       "certainty": "Possible",
       "headline": "Test Tornado Watch for Portage",
       "description": "This is a disabled local test alert for Tornado Watch behavior.",
+      "instruction": "",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-27T00:00:00Z",
-      "expires": "2026-04-27T06:00:00Z",
-      "geometry": null,
-      "source": "test"
+      "effective": "2026-04-28T16:42:54Z",
+      "expires": "2026-04-28T19:42:54Z",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -85.573192,
+              42.231228
+            ],
+            [
+              -85.573192,
+              42.231228
+            ],
+            [
+              -85.552149,
+              42.208769
+            ],
+            [
+              -85.571335,
+              42.184926
+            ],
+            [
+              -85.639415,
+              42.191347
+            ],
+            [
+              -85.573192,
+              42.231228
+            ]
+          ]
+        ]
+      },
+      "parameters": {}
     },
     {
       "enabled": false,
@@ -135,8 +167,8 @@
       "description": "This is a disabled local test alert for Severe Thunderstorm Watch behavior.",
       "instruction": "",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-28T15:37:11Z",
-      "expires": "2026-04-28T18:37:11Z",
+      "effective": "2026-04-28T16:57:34Z",
+      "expires": "2026-04-28T19:57:34Z",
       "geometry": {
         "type": "Polygon",
         "coordinates": [
@@ -199,17 +231,45 @@
     {
       "enabled": false,
       "id": "test-winter-storm-warning-49002",
+      "source": "test",
       "event": "Winter Storm Warning",
       "severity": "Severe",
       "urgency": "Expected",
       "certainty": "Likely",
       "headline": "Test Winter Storm Warning for Portage",
       "description": "This is a disabled local test alert for Winter Storm Warning behavior.",
+      "instruction": "",
       "areaDesc": "Kalamazoo",
       "effective": "2026-04-28T02:05:13Z",
       "expires": "2026-04-28T05:05:13Z",
-      "geometry": null,
-      "source": "test"
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -85.638692,
+              42.244678
+            ],
+            [
+              -85.554505,
+              42.222719
+            ],
+            [
+              -85.521308,
+              42.157722
+            ],
+            [
+              -85.638692,
+              42.157722
+            ],
+            [
+              -85.638692,
+              42.244678
+            ]
+          ]
+        ]
+      },
+      "parameters": {}
     },
     {
       "enabled": false,

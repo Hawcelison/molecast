@@ -188,6 +188,37 @@ table {
   overflow-wrap: anywhere;
 }
 
+.editor-form-message {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  display: none;
+  font-weight: 800;
+  margin: 0.75rem 0;
+  padding: 0.7rem 0.85rem;
+}
+
+.editor-form-message.is-visible {
+  display: block;
+}
+
+.editor-form-message--error {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #7f1d1d;
+}
+
+.editor-form-message--success {
+  background: #dcfce7;
+  border-color: #22c55e;
+  color: #14532d;
+}
+
+.editor-form-message--warning {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #78350f;
+}
+
 .status-label {
   color: color-mix(in srgb, currentColor 64%, transparent);
   display: block;

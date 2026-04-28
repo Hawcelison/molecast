@@ -139,9 +139,25 @@ def parse_nws_alerts(
     current_time = now_utc()
 
     for feature in payload.get("features", []):
+        if not isinstance(feature, dict):
+            logger.warning("Skipping malformed alert feature: source=%s feature=%r", source, feature)
+            continue
         properties = feature.get("properties", {})
+        if not isinstance(properties, dict):
+            logger.warning("Skipping alert with malformed properties: source=%s feature=%r", source, feature)
+            continue
         alert_id = properties.get("id") or feature.get("id")
-        match = match_alert_to_location(feature, location)
+        try:
+            match = match_alert_to_location(feature, location)
+        except Exception:
+            logger.warning(
+                "Skipping alert with malformed match data: source=%s id=%s geometry=%s",
+                source,
+                alert_id,
+                "present" if feature.get("geometry") else "missing",
+                exc_info=True,
+            )
+            continue
         if match is None:
             logger.debug(
                 "Filtered alert with no location match: source=%s id=%s areaDesc=%s "

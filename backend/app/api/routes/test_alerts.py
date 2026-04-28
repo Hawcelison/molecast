@@ -22,6 +22,11 @@ logger = get_logger()
 SEVERITY_VALUES = {"Extreme", "Severe", "Moderate", "Minor", "Unknown"}
 URGENCY_VALUES = {"Immediate", "Expected", "Future", "Past", "Unknown"}
 CERTAINTY_VALUES = {"Observed", "Likely", "Possible", "Unlikely", "Unknown"}
+VALIDATION_STATUS = status.HTTP_400_BAD_REQUEST
+
+
+def _validation_error(detail: str) -> HTTPException:
+    return HTTPException(status_code=VALIDATION_STATUS, detail=detail)
 
 
 def _parse_utc(value: Any) -> datetime | None:
@@ -32,9 +37,8 @@ def _parse_utc(value: Any) -> datetime | None:
 
 def _validate_choice(alert_id: str, field_name: str, value: Any, allowed_values: set[str]) -> None:
     if value not in allowed_values:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Alert {alert_id} {field_name} must be one of: {', '.join(sorted(allowed_values))}.",
+        raise _validation_error(
+            f"Alert {alert_id} {field_name} must be one of: {', '.join(sorted(allowed_values))}."
         )
 
 
@@ -42,44 +46,28 @@ def _validate_polygon_geometry(alert_id: str, geometry: dict[str, Any] | None) -
     if geometry is None:
         return
     if geometry.get("type") != "Polygon":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Alert {alert_id} geometry must be a GeoJSON Polygon.",
-        )
+        raise _validation_error(f"Alert {alert_id} geometry must be a GeoJSON Polygon.")
     coordinates = geometry.get("coordinates")
     if not isinstance(coordinates, list) or not coordinates:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Alert {alert_id} geometry coordinates must include at least one ring.",
-        )
+        raise _validation_error(f"Alert {alert_id} geometry coordinates must include at least one ring.")
     ring = coordinates[0]
     if not isinstance(ring, list) or len(ring) < 4:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Alert {alert_id} geometry polygon ring must include at least four positions.",
-        )
+        raise _validation_error(f"Alert {alert_id} invalid geometry: polygon needs at least 3 points.")
     for position in ring:
         if not isinstance(position, list | tuple) or len(position) < 2:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Alert {alert_id} geometry positions must be [longitude, latitude].",
-            )
+            raise _validation_error(f"Alert {alert_id} geometry positions must be [longitude, latitude].")
         longitude, latitude = position[0], position[1]
         if not isinstance(longitude, int | float) or not isinstance(latitude, int | float):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Alert {alert_id} geometry longitude/latitude must be numbers.",
-            )
-        if longitude < -180 or longitude > 180 or latitude < -90 or latitude > 90:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Alert {alert_id} geometry coordinates are outside valid longitude/latitude ranges.",
-            )
+            raise _validation_error(f"Alert {alert_id} geometry longitude/latitude must be numbers.")
+        if longitude < -180 or longitude > 180:
+            raise _validation_error(f"Alert {alert_id} invalid longitude.")
+        if latitude < -90 or latitude > 90:
+            raise _validation_error(f"Alert {alert_id} invalid latitude.")
     if ring[0][0] != ring[-1][0] or ring[0][1] != ring[-1][1]:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Alert {alert_id} geometry polygon ring must be closed.",
-        )
+        raise _validation_error(f"Alert {alert_id} geometry polygon ring must be closed.")
+    unique_points = {(float(position[0]), float(position[1])) for position in ring[:-1]}
+    if len(unique_points) < 3:
+        raise _validation_error(f"Alert {alert_id} invalid geometry: polygon needs at least 3 points.")
 
 
 def _resolve_test_alert_file() -> Path:
@@ -104,75 +92,52 @@ def _validate_test_alert_payload(payload: Any) -> dict[str, Any]:
         payload = payload["payload"]
 
     if not isinstance(payload, dict):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Payload must be a JSON object.",
-        )
+        raise _validation_error("Payload must be a JSON object.")
 
     alerts = payload.get("alerts")
     if not isinstance(alerts, list):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Payload must include an alerts array.",
-        )
+        raise _validation_error("Payload must include an alerts array.")
 
     seen_ids: set[str] = set()
     for index, alert in enumerate(alerts):
         if not isinstance(alert, dict):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Alert at index {index} must be a JSON object.",
-            )
+            raise _validation_error(f"Alert at index {index} must be a JSON object.")
 
         alert_id = alert.get("id")
         if not isinstance(alert_id, str) or not alert_id.strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Alert at index {index} must include a non-empty string id.",
-            )
+            raise _validation_error(f"Alert at index {index} must include a non-empty string id.")
         if alert_id in seen_ids:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Duplicate alert id: {alert_id}",
-            )
+            raise _validation_error(f"Duplicate alert id: {alert_id}")
         seen_ids.add(alert_id)
 
         event = alert.get("event")
         if not isinstance(event, str) or not event.strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Alert {alert_id} must include a non-empty string event.",
-            )
+            raise _validation_error(f"Alert {alert_id} must include a non-empty string event.")
 
         alert["source"] = alert.get("source") or "test"
 
         enabled = alert.get("enabled")
-        if not isinstance(enabled, bool):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Alert {alert_id} enabled must be true or false.",
-            )
+        if enabled is None:
+            alert["enabled"] = False
+            enabled = False
+        elif not isinstance(enabled, bool):
+            raise _validation_error(f"Alert {alert_id} enabled must be true or false.")
 
         parsed_times: dict[str, datetime] = {}
         for field_name in ("effective", "expires"):
             value = alert.get(field_name)
             if value in (None, ""):
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Alert {alert_id} {field_name} is required.",
-                )
+                raise _validation_error(f"Alert {alert_id} {field_name} is required.")
             parsed_value = _parse_utc(value)
             if parsed_value is None:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Alert {alert_id} {field_name} must be an ISO UTC timestamp ending in Z.",
+                raise _validation_error(
+                    f"Alert {alert_id} {field_name} must be an ISO UTC timestamp ending in Z."
                 )
             parsed_times[field_name] = parsed_value
-        if parsed_times["expires"] <= parsed_times["effective"]:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Alert {alert_id} expires must be after effective.",
-            )
+        if parsed_times["expires"] <= parsed_times["effective"] and not (
+            enabled is False and parsed_times["expires"] <= now_utc()
+        ):
+            raise _validation_error(f"Alert {alert_id} expires must be after effective.")
 
         _validate_choice(alert_id, "severity", alert.get("severity"), SEVERITY_VALUES)
         _validate_choice(alert_id, "urgency", alert.get("urgency"), URGENCY_VALUES)
@@ -180,25 +145,16 @@ def _validate_test_alert_payload(payload: Any) -> dict[str, Any]:
 
         area_desc = alert.get("areaDesc")
         if not isinstance(area_desc, str) or not area_desc.strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Alert {alert_id} areaDesc must not be blank.",
-            )
+            logger.warning("Test alert saved with blank areaDesc: id=%s", alert_id)
 
         geometry = alert.get("geometry")
         if geometry is not None and not isinstance(geometry, dict):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Alert {alert_id} geometry must be a JSON object or null.",
-            )
+            raise _validation_error(f"Alert {alert_id} geometry must be a JSON object or null.")
         _validate_polygon_geometry(alert_id, geometry)
 
         parameters = alert.get("parameters")
         if parameters is not None and not isinstance(parameters, dict):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Alert {alert_id} parameters must be a JSON object or null.",
-            )
+            raise _validation_error(f"Alert {alert_id} parameters must be a JSON object or null.")
 
     return payload
 
