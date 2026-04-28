@@ -60,7 +60,7 @@
     effective: "date",
     expires: "date",
   };
-  const defaultGeometryColor = "#3399FF";
+  const defaultGeometryColor = window.NWS_DEFAULT_ALERT_COLOR;
   const geometrySourceId = "test-alert-editor-geometry";
   const geometryFillLayerId = "test-alert-editor-geometry-fill";
   const geometryLineLayerId = "test-alert-editor-geometry-line";
@@ -275,27 +275,6 @@
     return JSON.parse(JSON.stringify(value));
   }
 
-  function getEventColor(event) {
-    const map = {
-      "Tornado Warning": "#FF0000",
-      "Tornado Watch": "#FFFF00",
-      "Severe Thunderstorm Warning": "#FFA500",
-      "Severe Thunderstorm Watch": "#DB7093",
-      "Flash Flood Warning": "#00FF00",
-      "Flood Warning": "#00FF00",
-      "Winter Storm Warning": "#FF69B4",
-      "Blizzard Warning": "#00FFFF",
-      "Ice Storm Warning": "#FF00FF",
-      "High Wind Warning": "#DAA520",
-      "Heat Advisory": "#FF7F50",
-      "Excessive Heat Warning": "#FF0000",
-      "Dense Fog Advisory": "#708090",
-      "Special Weather Statement": "#FFE4B5",
-    };
-
-    return map[event] || defaultGeometryColor;
-  }
-
   function currentAlerts() {
     if (!payload || !Array.isArray(payload.alerts)) {
       return [];
@@ -419,10 +398,13 @@
     return wrapper;
   }
 
-  function makeBadge(text, modifier) {
+  function makeBadge(text, modifier, backgroundColor) {
     const badge = document.createElement("span");
     badge.className = `test-alert-badge ${modifier || ""}`.trim();
     badge.textContent = text || "-";
+    if (backgroundColor) {
+      badge.style.backgroundColor = backgroundColor;
+    }
     return badge;
   }
 
@@ -437,10 +419,6 @@
     valueEl.textContent = value || "-";
     item.append(labelEl, valueEl);
     return item;
-  }
-
-  function severityClass(severity) {
-    return `test-alert-badge--${String(severity || "unknown").toLowerCase()}`;
   }
 
   function renderTable() {
@@ -462,7 +440,7 @@
       const index = entry.index;
       const row = document.createElement("article");
       row.className = "test-alert-card";
-      row.style.setProperty("--event-color", getEventColor(alert.event));
+      row.style.setProperty("--event-color", getAlertColor(alert));
       if (index === selectedIndex) {
         row.classList.add("selected-row");
       }
@@ -518,7 +496,7 @@
       titleWrap.append(title);
       const badges = document.createElement("div");
       badges.className = "test-alert-card__badges";
-      badges.append(makeBadge(alert.severity || "Unknown", severityClass(alert.severity)));
+      badges.append(makeBadge(alert.severity || "Unknown", "", getAlertColor({ severity: alert.severity })));
       const enabledWrap = document.createElement("label");
       enabledWrap.className = "test-alert-card__enabled";
       const enabledText = document.createElement("span");
@@ -755,7 +733,7 @@
     return { type: "FeatureCollection", features: [] };
   }
 
-  function geometryFeatureCollection(geometry, eventName) {
+  function geometryFeatureCollection(geometry, alert) {
     if (!geometry) {
       return emptyGeometryFeatureCollection();
     }
@@ -764,8 +742,8 @@
       features: [{
         type: "Feature",
         properties: {
-          color: getEventColor(eventName),
-          event: eventName || "",
+          color: getAlertColor(alert),
+          event: alert?.event || "",
         },
         geometry,
       }],
@@ -910,12 +888,12 @@
     geometryMap.fitBounds(bounds, { padding: 48, maxZoom: 13, duration: 250 });
   }
 
-  function renderGeometryOnMap(geometry, eventName, fitBounds) {
-    const color = getEventColor(eventName);
+  function renderGeometryOnMap(geometry, alert, fitBounds) {
+    const color = getAlertColor(alert);
     if (!geometryMap || !ensureGeometryLayers()) {
       return;
     }
-    const collection = geometryFeatureCollection(geometry, eventName);
+    const collection = geometryFeatureCollection(geometry, alert);
     geometryMap.getSource(geometrySourceId).setData(collection);
     if (fitBounds && geometry) {
       fitMapToPolygon(geometry);
@@ -937,8 +915,12 @@
   }
 
   function renderSelectedGeometryOnMap(geometry, fitBounds) {
-    const eventName = byId("field-event")?.value || currentAlerts()[selectedIndex]?.event || "";
-    renderGeometryOnMap(geometry, eventName, fitBounds !== false);
+    const selectedAlert = currentAlerts()[selectedIndex] || {};
+    const alert = {
+      event: byId("field-event")?.value || selectedAlert.event || "",
+      severity: byId("field-severity")?.value || selectedAlert.severity || "",
+    };
+    renderGeometryOnMap(geometry, alert, fitBounds !== false);
   }
 
   function getTargetCenter() {
@@ -1466,6 +1448,9 @@
     byId("field-effective").addEventListener("input", updateLocalTimes);
     byId("field-expires").addEventListener("input", updateLocalTimes);
     byId("field-event").addEventListener("change", function () {
+      renderSelectedGeometryOnMap(readCurrentGeometryForMap(), false);
+    });
+    byId("field-severity").addEventListener("change", function () {
       renderSelectedGeometryOnMap(readCurrentGeometryForMap(), false);
     });
     byId("field-geometry").addEventListener("input", function () {

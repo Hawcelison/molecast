@@ -26,8 +26,8 @@
       "description": "TEST tornado warning centered near 4222 Fireside Ave, Portage, MI 49002.",
       "instruction": "TAKE COVER NOW. Move to a basement or interior room on the lowest floor.",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-28T13:48:32Z",
-      "expires": "2026-04-28T16:48:32Z",
+      "effective": "2026-04-28T17:59:33Z",
+      "expires": "2026-04-28T20:59:33Z",
       "geometry": {
         "type": "Polygon",
         "coordinates": [
@@ -103,8 +103,8 @@
       "description": "This is a disabled local test alert for Tornado Watch behavior.",
       "instruction": "",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-28T16:42:54Z",
-      "expires": "2026-04-28T19:42:54Z",
+      "effective": "2026-04-28T17:59:38Z",
+      "expires": "2026-04-28T20:59:38Z",
       "geometry": {
         "type": "Polygon",
         "coordinates": [
@@ -167,8 +167,8 @@
       "description": "This is a disabled local test alert for Severe Thunderstorm Watch behavior.",
       "instruction": "",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-28T16:57:34Z",
-      "expires": "2026-04-28T19:57:34Z",
+      "effective": "2026-04-28T17:59:35Z",
+      "expires": "2026-04-28T20:59:35Z",
       "geometry": {
         "type": "Polygon",
         "coordinates": [
@@ -272,7 +272,7 @@
       "parameters": {}
     },
     {
-      "enabled": false,
+      "enabled": true,
       "id": "test-blizzard-warning-49002",
       "source": "test",
       "event": "Blizzard Warning",
@@ -283,8 +283,8 @@
       "description": "This is a disabled local test alert for Blizzard Warning behavior.",
       "instruction": "",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-27T20:02:52Z",
-      "expires": "2026-04-27T23:02:52Z",
+      "effective": "2026-04-28T17:59:44Z",
+      "expires": "2026-04-28T20:59:44Z",
       "geometry": null,
       "parameters": null
     },

@@ -16,6 +16,87 @@ table {
   min-height: 100vh;
 }
 
+.alert-banner-container {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0 0 1rem;
+  width: 100%;
+}
+
+.alert-banner {
+  --alert-accent: #2563eb;
+  --alert-fg: #ffffff;
+  background: var(--alert-accent);
+  border: 0;
+  border-radius: 0;
+  box-sizing: border-box;
+  color: var(--alert-fg);
+  cursor: pointer;
+  overflow: hidden;
+  width: 100%;
+}
+
+.alert-banner + .alert-banner {
+  border-top: 1px solid color-mix(in srgb, var(--alert-fg) 42%, transparent);
+}
+
+.alert-banner:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--alert-fg) 70%, transparent);
+  outline-offset: -3px;
+}
+
+.alert-banner__compact {
+  align-items: center;
+  display: flex;
+  min-height: 2.75rem;
+  padding: 0.7rem 1rem;
+}
+
+.alert-banner__details {
+  background: color-mix(in srgb, var(--alert-accent) 82%, #000000);
+  border-top: 1px solid color-mix(in srgb, var(--alert-fg) 38%, transparent);
+  display: none;
+  font-size: 0.9rem;
+  gap: 0.55rem 1rem;
+  grid-template-columns: minmax(7rem, max-content) minmax(0, 1fr);
+  line-height: 1.45;
+  margin: 0;
+  padding: 0.85rem 1rem 1rem;
+}
+
+.alert-banner[aria-expanded="true"] .alert-banner__details {
+  display: grid;
+}
+
+.alert-banner__title {
+  display: block;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.alert-banner__detail-row {
+  display: contents;
+}
+
+.alert-banner__details dt,
+.alert-banner__details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.alert-banner__details dt {
+  font-weight: 900;
+}
+
+.alert-banner__details dd {
+  font-weight: 700;
+}
+
 #map-panel {
   width: 100%;
 }
@@ -104,26 +185,6 @@ table {
   font-weight: 700;
   line-height: 1;
   padding: 0.35rem 0.5rem;
-}
-
-.severity-extreme {
-  background: #7f1d1d;
-}
-
-.severity-severe {
-  background: #b45309;
-}
-
-.severity-moderate {
-  background: #d97706;
-}
-
-.severity-minor {
-  background: #2563eb;
-}
-
-.severity-unknown {
-  background: #6b7280;
 }
 
 .app-footer {
@@ -396,26 +457,6 @@ button {
 
 .test-alert-badge--source {
   background: #374151;
-}
-
-.test-alert-badge--extreme {
-  background: #7f1d1d;
-}
-
-.test-alert-badge--severe {
-  background: #b45309;
-}
-
-.test-alert-badge--moderate {
-  background: #d97706;
-}
-
-.test-alert-badge--minor {
-  background: #2563eb;
-}
-
-.test-alert-badge--unknown {
-  background: #6b7280;
 }
 
 .test-alert-card__id {
@@ -871,6 +912,15 @@ button.is-active {
   .parameter-grid,
   .alert-card__header {
     grid-template-columns: 1fr;
+  }
+
+  .alert-banner__compact {
+    padding-inline: 0.75rem;
+  }
+
+  .alert-banner__details {
+    grid-template-columns: 1fr;
+    padding-inline: 0.75rem;
   }
 
   .editor-header {
