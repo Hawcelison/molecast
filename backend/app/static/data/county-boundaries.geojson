@@ -1,0 +1,24 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Kalamazoo County",
+        "state": "MI"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-85.7909, 42.4206],
+            [-85.2932, 42.4206],
+            [-85.2932, 42.0713],
+            [-85.7909, 42.0713],
+            [-85.7909, 42.4206]
+          ]
+        ]
+      }
+    }
+  ]
+}

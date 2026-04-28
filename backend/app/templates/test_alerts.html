@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block frontend_config %}
+<script>
+  window.MOLECAST_TEST_ALERT_CONFIG = {{ frontend_config | tojson }};
+</script>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="/static/js/test-alerts.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<main class="test-alert-editor">
+  <header class="editor-header">
+    <div>
+      <p class="editor-warning">Local Test Alert Editor - development use only</p>
+      <h1>Local Test Alert Editor</h1>
+      <p class="editor-note">Local development tool. Do not expose publicly.</p>
+    </div>
+    <a class="editor-link" href="/">Back to Molecast</a>
+  </header>
+
+  <section class="editor-status" aria-live="polite">
+    <div>
+      <span class="status-label">File</span>
+      <strong id="test-alert-file">Loading...</strong>
+    </div>
+    <div>
+      <span class="status-label">Test Alerts</span>
+      <strong><span id="test-alert-count">0</span> total</strong>
+    </div>
+    <div>
+      <span class="status-label">Enabled Test</span>
+      <strong id="test-alert-enabled-count">0</strong>
+    </div>
+    <div>
+      <span class="status-label">Active Test</span>
+      <strong id="test-alert-active-count">0</strong>
+    </div>
+    <div>
+      <span class="status-label">Active NWS</span>
+      <strong id="nws-alert-active-count">0</strong>
+    </div>
+    <div>
+      <span class="status-label">Total Active</span>
+      <strong id="total-alert-active-count">0</strong>
+    </div>
+    <div>
+      <span class="status-label">Source Breakdown</span>
+      <strong id="alert-source-breakdown">test: 0, nws: 0</strong>
+    </div>
+    <div>
+      <span class="status-label">Last Loaded</span>
+      <strong id="test-alert-last-loaded">Never</strong>
+    </div>
+    <div>
+      <span class="status-label">Last Saved</span>
+      <strong id="test-alert-last-saved">Unknown</strong>
+    </div>
+    <div>
+      <span class="status-label">Active Refreshed</span>
+      <strong id="active-alert-refreshed">Unknown</strong>
+    </div>
+    <div>
+      <span class="status-label">Status</span>
+      <strong id="test-alert-status">Ready</strong>
+    </div>
+  </section>
+
+  <section class="editor-actions" aria-label="Editor actions">
+    <button type="button" id="reload-alerts">Reload from file</button>
+    <button type="button" id="add-alert">Add alert</button>
+    <button type="button" id="enable-all-alerts">Enable all alerts</button>
+    <button type="button" id="disable-all-alerts">Disable all alerts</button>
+    <button type="button" id="save-all-alerts" class="primary-action">Save JSON</button>
+    <button type="button" id="refresh-active-alerts">Refresh active alerts</button>
+  </section>
+
+  <section class="editor-grid">
+    <div class="alert-list-panel">
+      <h2>Alerts</h2>
+      <div class="alert-table-wrap">
+        <table class="editor-table alerts-table">
+          <thead>
+            <tr>
+              <th><button type="button" class="sort-header" data-sort-key="id">ID <span data-sort-indicator="id"></span></button></th>
+              <th><button type="button" class="sort-header" data-sort-key="event">Event <span data-sort-indicator="event"></span></button></th>
+              <th><button type="button" class="sort-header" data-sort-key="source">Source <span data-sort-indicator="source"></span></button></th>
+              <th><button type="button" class="sort-header" data-sort-key="enabled">Enabled <span data-sort-indicator="enabled"></span></button></th>
+              <th><button type="button" class="sort-header" data-sort-key="severity">Severity <span data-sort-indicator="severity"></span></button></th>
+              <th><button type="button" class="sort-header" data-sort-key="urgency">Urgency <span data-sort-indicator="urgency"></span></button></th>
+              <th><button type="button" class="sort-header" data-sort-key="certainty">Certainty <span data-sort-indicator="certainty"></span></button></th>
+              <th><button type="button" class="sort-header" data-sort-key="areaDesc">Area Description / Counties <span data-sort-indicator="areaDesc"></span></button></th>
+              <th><button type="button" class="sort-header" data-sort-key="effective">Effective <span data-sort-indicator="effective"></span></button></th>
+              <th><button type="button" class="sort-header" data-sort-key="expires">Expires <span data-sort-indicator="expires"></span></button></th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="test-alert-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <form id="test-alert-form" class="alert-form">
+      <div class="form-heading">
+        <h2>Edit Alert</h2>
+        <label class="enabled-toggle">
+          <input type="checkbox" id="field-enabled">
+          Enabled
+        </label>
+      </div>
+
+      <div class="form-row">
+        <label>ID<input id="field-id" name="id" required></label>
+        <label>Source<input id="field-source" name="source" value="test"></label>
+      </div>
+
+      <div class="form-row">
+        <label>Event<select id="field-event" name="event"></select></label>
+        <label>NWS areaDesc / Counties<input id="field-areaDesc" name="areaDesc"><span class="field-help">NWS areaDesc may contain one or more counties, zones, or named areas. It is not guaranteed to be a single county.</span></label>
+      </div>
+
+      <div class="form-row">
+        <label>Severity<select id="field-severity" name="severity"></select></label>
+        <label>Urgency<select id="field-urgency" name="urgency"></select></label>
+        <label>Certainty<select id="field-certainty" name="certainty"></select></label>
+      </div>
+
+      <label>Headline<input id="field-headline" name="headline"></label>
+      <label>Description<textarea id="field-description" name="description" rows="4"></textarea></label>
+      <label>Instruction<textarea id="field-instruction" name="instruction" rows="3"></textarea></label>
+
+      <div class="form-row time-row">
+        <label>Effective UTC<input id="field-effective" name="effective" placeholder="2026-04-27T16:28:53Z"><span class="time-local" id="field-effective-local">Local: -</span></label>
+        <label>Expires UTC<input id="field-expires" name="expires" placeholder="2026-04-27T19:28:53Z"><span class="time-local" id="field-expires-local">Local: -</span></label>
+      </div>
+
+      <div class="time-tools">
+        <label>Before hours<input id="before-hours" type="number" min="0" step="1" value="1"></label>
+        <label>After hours<input id="after-hours" type="number" min="1" step="1" value="2"></label>
+        <button type="button" id="set-active-now">Set Active Now</button>
+      </div>
+
+      <section class="editor-subsection">
+        <h3>Geometry</h3>
+        <div class="form-row">
+          <label>Shape type<select id="geometry-shape-type"><option value="rectangle">rectangle</option></select></label>
+          <label>Half-width miles<input id="geometry-half-width" type="number" min="0.1" step="0.1" value="3"></label>
+        </div>
+        <div class="form-row">
+          <label>ZIP / target center<input id="geometry-zip" placeholder="49002"></label>
+          <div class="geometry-button-row">
+            <button type="button" id="use-target-center">Use ZIP/default center</button>
+            <button type="button" id="set-center-from-map">Set center from map click</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>Center latitude (-90 to 90)<input id="geometry-center-lat" type="number" min="-90" max="90" step="0.000001"></label>
+          <label>Center longitude (-180 to 180)<input id="geometry-center-lon" type="number" min="-180" max="180" step="0.000001"></label>
+        </div>
+        <p class="field-help">Generated GeoJSON uses coordinates in [longitude, latitude] order.</p>
+        <div id="geometry-map" class="geometry-map" aria-label="Geometry map"></div>
+        <p id="geometry-map-status" class="field-help">Click the map to set the center point. ZIP lookup uses metadata target coordinates for now.</p>
+        <button type="button" id="generate-geometry">Generate Rectangle Geometry</button>
+        <details class="advanced-json">
+          <summary>Advanced JSON</summary>
+          <label>Raw Geometry JSON<textarea id="field-geometry" class="json-field" rows="10" spellcheck="false"></textarea></label>
+        </details>
+      </section>
+
+      <section class="editor-subsection">
+        <h3>Parameters</h3>
+        <div id="parameter-fields" class="parameter-grid"></div>
+        <details class="advanced-json">
+          <summary>Advanced JSON</summary>
+          <label>Raw Parameters JSON<textarea id="field-parameters" class="json-field" rows="8" spellcheck="false"></textarea></label>
+        </details>
+      </section>
+
+      <div class="form-actions">
+        <button type="submit" class="primary-action">Save Alert</button>
+        <button type="button" id="disable-alert">Disable Alert</button>
+        <button type="button" id="clone-alert">Clone Alert</button>
+        <button type="button" id="delete-alert" class="danger-action">Delete Alert</button>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}

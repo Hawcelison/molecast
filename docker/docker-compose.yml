@@ -1,0 +1,34 @@
+services:
+  molecast:
+    container_name: molecast
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    env_file:
+      - path: ../.env
+        required: false
+    ports:
+      - "5000:5000"
+    environment:
+      APP_NAME: ${APP_NAME:-Molecast}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      APP_ENV: ${APP_ENV:-local}
+      DATA_DIR: ${DATA_DIR:-/app/data}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/molecast.sqlite3}
+      DEBUG: ${DEBUG:-false}
+      DEFAULT_LOCATION_CITY: ${DEFAULT_LOCATION_CITY:-Portage}
+      DEFAULT_LOCATION_STATE: ${DEFAULT_LOCATION_STATE:-MI}
+      DEFAULT_LOCATION_COUNTY: ${DEFAULT_LOCATION_COUNTY:-Kalamazoo}
+      DEFAULT_LOCATION_POSTAL_CODE: ${DEFAULT_LOCATION_POSTAL_CODE:-49002}
+      DEFAULT_LOCATION_DISPLAY_NAME: ${DEFAULT_LOCATION_DISPLAY_NAME:-Portage, MI 49002}
+      DEFAULT_LOCATION_LATITUDE: ${DEFAULT_LOCATION_LATITUDE:-42.2012}
+      DEFAULT_LOCATION_LONGITUDE: ${DEFAULT_LOCATION_LONGITUDE:--85.58}
+      WEATHER_REFRESH_SECONDS: ${WEATHER_REFRESH_SECONDS:-900}
+      ALERT_REFRESH_SECONDS: ${ALERT_REFRESH_SECONDS:-60}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-7}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FILE_NAME: ${LOG_FILE_NAME:-molecast.log}
+    volumes:
+      - ../data:/app/data
+      - ../test:/app/test
+    restart: unless-stopped

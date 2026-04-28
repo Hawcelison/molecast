@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block frontend_config %}
+<script>
+  window.MOLECAST_CONFIG = {{ frontend_config | tojson }};
+</script>
+{% endblock %}
+
+{% block content %}
+<main id="dashboard">
+  <h1>Molecast</h1>
+  <section id="current-conditions"></section>
+  <section id="forecast"></section>
+  <section id="map-panel">
+    <div id="map" aria-label="Weather map"></div>
+  </section>
+  <section id="alerts" class="alert-panel" aria-live="polite">
+    <h2>Alerts</h2>
+    <div id="alerts-list" class="alert-list" role="list"></div>
+  </section>
+  <section id="radar"></section>
+  <footer class="app-footer">
+    <a href="/test-alerts">Test Alert Editor</a>
+  </footer>
+</main>
+{% endblock %}

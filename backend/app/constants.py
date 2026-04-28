@@ -1,0 +1,37 @@
+"""Non-secret application constants used as default settings."""
+
+APP_NAME = "Molecast"
+# Default only. Runtime version is read through Settings.app_version from APP_VERSION.
+APP_VERSION = "0.1.0"
+APP_VERSION_ENV_VAR = "APP_VERSION"
+APP_VERSION_SCHEME = "semver"
+CHANGELOG_FILE_NAME = "CHANGELOG.md"
+APP_ENV = "local"
+DATABASE_URL = "sqlite:///./data/molecast.sqlite3"
+DATA_DIR = "data"
+
+DEFAULT_LOCATION_CITY = "Portage"
+DEFAULT_LOCATION_STATE = "MI"
+DEFAULT_LOCATION_COUNTY = "Kalamazoo"
+DEFAULT_LOCATION_POSTAL_CODE = "49002"
+DEFAULT_LOCATION_DISPLAY_NAME = "Portage, MI 49002"
+DEFAULT_LOCATION_LATITUDE = 42.2012
+DEFAULT_LOCATION_LONGITUDE = -85.58
+
+WEATHER_REFRESH_SECONDS = 900
+ALERT_REFRESH_SECONDS = 60
+NWS_ACTIVE_ALERTS_URL = "https://api.weather.gov/alerts/active"
+NWS_USER_AGENT = "Molecast/0.1.0"
+TEST_ALERTS_FILE = "test/alerts_test.json"
+LOG_RETENTION_DAYS = 7
+LOG_LEVEL = "INFO"
+DEBUG_LOG_LEVEL = "DEBUG"
+LOG_FILE_NAME = "molecast.log"
+MAPBOX_TOKEN = ""
+RAINVIEWER_API_URL = "https://api.rainviewer.com/public/weather-maps.json"
+RADAR_FRAME_INTERVAL_MS = 700
+RADAR_OPACITY = 0.65
+COUNTY_BOUNDARIES_GEOJSON_URL = "/static/data/county-boundaries.geojson"
+COUNTY_BOUNDARIES_LINE_COLOR = "#cbd5e1"
+COUNTY_BOUNDARIES_LINE_OPACITY = 0.45
+COUNTY_BOUNDARIES_LINE_WIDTH = 1
