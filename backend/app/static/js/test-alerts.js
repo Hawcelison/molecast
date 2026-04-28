@@ -629,14 +629,6 @@
 
   function renderGeometryOnMap(geometry, eventName, fitBounds) {
     const color = getEventColor(eventName);
-    window.MOLECAST_TEST_GEOMETRY_DEBUG = {
-      geometry,
-      color,
-      event: eventName || "",
-      updatedAt: new Date().toISOString(),
-      mapLoaded: geometryMapLoaded,
-    };
-    console.debug("Molecast test alert geometry update", window.MOLECAST_TEST_GEOMETRY_DEBUG);
     if (!geometryMap || !ensureGeometryLayers()) {
       return;
     }
