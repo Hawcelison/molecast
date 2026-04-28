@@ -70,8 +70,13 @@
   let sortState = { key: "", direction: "asc" };
   let geometryMap = null;
   let geometryMarker = null;
+  let geometryVertexMarkers = [];
   let geometryMapClickFallbackWired = false;
   let geometryMapLoaded = false;
+  let geometryMode = "rectangle";
+  let geometryDrawPoints = [];
+  let geometryEditEnabled = false;
+  let suppressGeometryFieldInput = false;
 
   function byId(id) {
     return document.getElementById(id);
@@ -172,6 +177,17 @@
       throw new Error("Geometry Polygon ring must be closed.");
     }
     return geometry;
+  }
+
+  function validateGeometryForUi(geometry) {
+    try {
+      validateGeometry(geometry);
+      setGeometryStatus("Geometry is valid.");
+      return true;
+    } catch (error) {
+      setGeometryStatus(error.message || "Invalid geometry.");
+      return false;
+    }
   }
 
   function validatePayloadBeforeSave() {
@@ -354,6 +370,11 @@
       const key = indicator.dataset.sortIndicator;
       indicator.textContent = key === sortState.key ? (sortState.direction === "asc" ? "▲" : "▼") : "";
     });
+    document.querySelectorAll("[data-sort-key]").forEach(function (button) {
+      const active = button.dataset.sortKey === sortState.key;
+      button.classList.toggle("sort-header--active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+    });
   }
 
   function makeTimeCell(value) {
@@ -374,33 +395,58 @@
     return wrapper;
   }
 
+  function makeBadge(text, modifier) {
+    const badge = document.createElement("span");
+    badge.className = `test-alert-badge ${modifier || ""}`.trim();
+    badge.textContent = text || "-";
+    return badge;
+  }
+
+  function makeMetaItem(label, value) {
+    const item = document.createElement("div");
+    item.className = "test-alert-meta__item";
+    const labelEl = document.createElement("span");
+    labelEl.className = "test-alert-meta__label";
+    labelEl.textContent = `${label}:`;
+    const valueEl = document.createElement("span");
+    valueEl.className = "test-alert-meta__value";
+    valueEl.textContent = value || "-";
+    item.append(labelEl, valueEl);
+    return item;
+  }
+
+  function severityClass(severity) {
+    return `test-alert-badge--${String(severity || "unknown").toLowerCase()}`;
+  }
+
   function renderTable() {
-    const tbody = byId("test-alert-table");
+    const list = byId("test-alert-table");
     const alerts = currentAlerts();
     byId("test-alert-count").textContent = String(alerts.length);
     updateSortIndicators();
 
     if (!alerts.length) {
-      const row = document.createElement("tr");
-      const cell = document.createElement("td");
-      cell.colSpan = 11;
-      cell.textContent = "No test alerts found.";
-      row.append(cell);
-      tbody.replaceChildren(row);
+      const empty = document.createElement("p");
+      empty.className = "alert-empty";
+      empty.textContent = "No test alerts found.";
+      list.replaceChildren(empty);
       return;
     }
 
-    tbody.replaceChildren(...sortedAlertEntries().map(function (entry) {
+    list.replaceChildren(...sortedAlertEntries().map(function (entry) {
       const alert = entry.alert;
       const index = entry.index;
-      const row = document.createElement("tr");
+      const row = document.createElement("article");
+      row.className = "test-alert-card";
+      row.style.setProperty("--event-color", getEventColor(alert.event));
       if (index === selectedIndex) {
-        row.className = "selected-row";
+        row.classList.add("selected-row");
       }
 
       const enabled = document.createElement("input");
       enabled.type = "checkbox";
       enabled.checked = alert.enabled === true;
+      enabled.setAttribute("aria-label", `Enable ${alert.event || alert.id || "test alert"}`);
       enabled.addEventListener("change", function () {
         alert.enabled = enabled.checked;
         if (index === selectedIndex) {
@@ -408,49 +454,87 @@
         }
       });
 
-      const actionsCell = document.createElement("td");
-      actionsCell.className = "table-actions";
       const actionsWrap = document.createElement("div");
       actionsWrap.className = "actions-wrap";
       [
-        ["Edit", "", function () { selectAlert(index); }],
-        ["Clone", "", function () { cloneAlert(index).catch(showError); }],
-        ["Activate UTC", "primary-action", function () { activateAlertAtIndex(index).catch(showError); }],
-        ["Expire", "", function () { expireAlertAtIndex(index).catch(showError); }],
-        ["Delete", "danger-action", function () { deleteAlert(index).catch(showError); }],
-      ].forEach(function (config) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = config[0];
-        if (config[1]) {
-          button.className = config[1];
-        }
-        button.addEventListener("click", config[2]);
-        actionsWrap.append(button);
+        [
+          ["Edit", "", function () { selectAlert(index); }],
+          ["Clone", "", function () { cloneAlert(index).catch(showError); }],
+        ],
+        [
+          ["Activate", "primary-action", function () { activateAlertAtIndex(index).catch(showError); }],
+          ["Expire", "", function () { expireAlertAtIndex(index).catch(showError); }],
+        ],
+        [
+          ["Delete", "danger-action", function () { deleteAlert(index).catch(showError); }],
+        ],
+      ].forEach(function (group) {
+        const groupEl = document.createElement("div");
+        groupEl.className = "actions-wrap__group";
+        group.forEach(function (config) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = config[0];
+          if (config[1]) {
+            button.className = config[1];
+          }
+          button.addEventListener("click", config[2]);
+          groupEl.append(button);
+        });
+        actionsWrap.append(groupEl);
       });
-      actionsCell.append(actionsWrap);
 
+      const topLine = document.createElement("div");
+      topLine.className = "test-alert-card__topline";
+      const titleWrap = document.createElement("div");
+      titleWrap.className = "test-alert-card__title-wrap";
+      const title = document.createElement("h3");
+      title.className = "test-alert-card__title";
+      title.textContent = alert.event || "Untitled alert";
+      titleWrap.append(title);
+      const badges = document.createElement("div");
+      badges.className = "test-alert-card__badges";
+      badges.append(makeBadge(alert.severity || "Unknown", severityClass(alert.severity)));
+      const enabledWrap = document.createElement("label");
+      enabledWrap.className = "test-alert-card__enabled";
+      const enabledText = document.createElement("span");
+      enabledText.textContent = "Enabled";
+      enabledWrap.append(enabled, enabledText);
+      topLine.append(titleWrap, badges, enabledWrap);
+
+      const idLine = document.createElement("div");
+      idLine.className = "test-alert-card__id";
+      const idLabel = document.createElement("span");
+      idLabel.textContent = "ID:";
+      const idValue = document.createElement("code");
+      idValue.textContent = alert.id || "-";
+      idValue.title = alert.id || "";
+      idLine.append(idLabel, idValue);
+
+      const meta = document.createElement("div");
+      meta.className = "test-alert-meta";
+      meta.append(
+        makeMetaItem("Area", alert.areaDesc || ""),
+        makeMetaItem("Urgency", alert.urgency || ""),
+        makeMetaItem("Certainty", alert.certainty || "")
+      );
+
+      const times = document.createElement("div");
+      times.className = "test-alert-times";
       [
-        alert.id || "",
-        alert.event || "",
-        alert.source || "test",
-        enabled,
-        alert.severity || "",
-        alert.urgency || "",
-        alert.certainty || "",
-        alert.areaDesc || "",
-        makeTimeCell(alert.effective || ""),
-        makeTimeCell(alert.expires || ""),
-      ].forEach(function (value) {
-        const cell = document.createElement("td");
-        if (value instanceof Node) {
-          cell.append(value);
-        } else {
-          cell.textContent = value;
-        }
-        row.append(cell);
+        ["Effective", alert.effective || ""],
+        ["Expires", alert.expires || ""],
+      ].forEach(function (config) {
+        const timeGroup = document.createElement("div");
+        timeGroup.className = "test-alert-time-group";
+        const label = document.createElement("span");
+        label.className = "test-alert-time-group__label";
+        label.textContent = `${config[0]}:`;
+        timeGroup.append(label, makeTimeCell(config[1]));
+        times.append(timeGroup);
       });
-      row.append(actionsCell);
+
+      row.append(topLine, idLine, meta, times, actionsWrap);
       return row;
     }));
   }
@@ -501,7 +585,9 @@
   function setGeometryFriendlyFields(geometry) {
     byId("geometry-center-lat").value = "";
     byId("geometry-center-lon").value = "";
+    byId("geometry-shape-type").value = "rectangle";
     if (!geometry || geometry.type !== "Polygon" || !Array.isArray(geometry.coordinates?.[0])) {
+      updateGeometryMarkerLabel();
       return;
     }
     const ring = geometry.coordinates[0].filter(function (coord) {
@@ -515,6 +601,9 @@
     if (!lons.length || !lats.length) {
       return;
     }
+    if (!isRectangleGeometry(geometry)) {
+      byId("geometry-shape-type").value = "polygon";
+    }
     byId("geometry-center-lat").value = ((Math.min(...lats) + Math.max(...lats)) / 2).toFixed(6);
     byId("geometry-center-lon").value = ((Math.min(...lons) + Math.max(...lons)) / 2).toFixed(6);
     if (geometryMarker) {
@@ -523,9 +612,43 @@
         Number(byId("geometry-center-lat").value),
       ]);
     }
+    updateGeometryMarkerLabel();
   }
 
-  function generateRectangleGeometry() {
+  function isRectangleGeometry(geometry) {
+    const ring = geometry?.coordinates?.[0];
+    return geometry?.type === "Polygon" && Array.isArray(ring) && ring.length === 5;
+  }
+
+  function getClosedRing(points) {
+    if (!Array.isArray(points) || points.length < 3) {
+      return null;
+    }
+    const ring = points.map(function (point) {
+      return [Number(point[0].toFixed(6)), Number(point[1].toFixed(6))];
+    });
+    const first = ring[0];
+    const last = ring[ring.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      ring.push([first[0], first[1]]);
+    }
+    return ring;
+  }
+
+  function polygonFromPoints(points) {
+    const ring = getClosedRing(points);
+    if (!ring) {
+      throw new Error("Polygon must include at least three points.");
+    }
+    const geometry = {
+      type: "Polygon",
+      coordinates: [ring],
+    };
+    validateGeometry(geometry);
+    return geometry;
+  }
+
+  function buildRectangleGeometry() {
     const lat = Number.parseFloat(byId("geometry-center-lat").value);
     const lon = Number.parseFloat(byId("geometry-center-lon").value);
     const halfWidth = Number.parseFloat(byId("geometry-half-width").value);
@@ -549,10 +672,29 @@
       type: "Polygon",
       coordinates: [[[west, north], [east, north], [east, south], [west, south], [west, north]]],
     };
-    byId("field-geometry").value = prettyJson(geometry);
-    setGeometryFriendlyFields(geometry);
-    renderSelectedGeometryOnMap();
     return geometry;
+  }
+
+  function setGeometryField(geometry, statusMessage) {
+    suppressGeometryFieldInput = true;
+    byId("field-geometry").value = prettyJson(geometry);
+    suppressGeometryFieldInput = false;
+    renderSelectedGeometryOnMap(false);
+    syncVertexMarkers(geometry);
+    if (geometry && validateGeometryForUi(geometry) && statusMessage) {
+      setGeometryStatus(statusMessage);
+    }
+  }
+
+  function updateRectanglePreview() {
+    if (byId("geometry-shape-type").value !== "rectangle" || geometryMode !== "rectangle") {
+      return;
+    }
+    try {
+      setGeometryField(buildRectangleGeometry(), "Rectangle preview updated.");
+    } catch (error) {
+      setGeometryStatus(error.message || "Invalid rectangle geometry.");
+    }
   }
 
   function emptyGeometryFeatureCollection() {
@@ -574,6 +716,96 @@
         geometry,
       }],
     };
+  }
+
+  function updateGeometryMarkerLabel() {
+    if (!geometryMarker) {
+      return;
+    }
+    const lat = Number.parseFloat(byId("geometry-center-lat").value);
+    const lon = Number.parseFloat(byId("geometry-center-lon").value);
+    const markerEl = geometryMarker.getElement();
+    const label = markerEl.querySelector(".geometry-center-marker__label");
+    if (!label) {
+      return;
+    }
+    label.textContent = Number.isFinite(lat) && Number.isFinite(lon)
+      ? `${lat.toFixed(5)}, ${lon.toFixed(5)}`
+      : "No center";
+  }
+
+  function makeCenterMarkerElement() {
+    const marker = document.createElement("div");
+    marker.className = "geometry-center-marker";
+    const dot = document.createElement("span");
+    dot.className = "geometry-center-marker__dot";
+    const label = document.createElement("span");
+    label.className = "geometry-center-marker__label";
+    marker.append(dot, label);
+    return marker;
+  }
+
+  function clearVertexMarkers() {
+    geometryVertexMarkers.forEach(function (marker) {
+      marker.remove();
+    });
+    geometryVertexMarkers = [];
+  }
+
+  function getEditablePolygonPoints(geometry) {
+    const ring = geometry?.coordinates?.[0];
+    if (!Array.isArray(ring) || ring.length < 4) {
+      return [];
+    }
+    return ring.slice(0, -1).map(function (coord) {
+      return [Number(coord[0]), Number(coord[1])];
+    }).filter(function (coord) {
+      return Number.isFinite(coord[0]) && Number.isFinite(coord[1]);
+    });
+  }
+
+  function makeVertexMarkerElement(index) {
+    const marker = document.createElement("button");
+    marker.type = "button";
+    marker.className = "geometry-vertex-marker";
+    marker.textContent = String(index + 1);
+    marker.setAttribute("aria-label", `Polygon point ${index + 1}`);
+    return marker;
+  }
+
+  function syncVertexMarkers(geometry) {
+    clearVertexMarkers();
+    if (!geometryMap || !window.mapboxgl || (!geometryEditEnabled && geometryMode !== "draw")) {
+      return;
+    }
+    const points = geometryMode === "draw" ? geometryDrawPoints : getEditablePolygonPoints(geometry);
+    points.forEach(function (point, index) {
+      const marker = new window.mapboxgl.Marker({
+        element: makeVertexMarkerElement(index),
+        draggable: geometryEditEnabled,
+      }).setLngLat(point).addTo(geometryMap);
+      if (geometryEditEnabled) {
+        marker.on("drag", function () {
+          const lngLat = marker.getLngLat();
+          const nextPoints = getEditablePolygonPoints(readCurrentGeometryForMap());
+          nextPoints[index] = [lngLat.lng, lngLat.lat];
+          try {
+            const nextGeometry = polygonFromPoints(nextPoints);
+            suppressGeometryFieldInput = true;
+            byId("field-geometry").value = prettyJson(nextGeometry);
+            suppressGeometryFieldInput = false;
+            renderGeometryOnMap(nextGeometry, byId("field-event")?.value || "", false);
+            validateGeometryForUi(nextGeometry);
+          } catch (error) {
+            setGeometryStatus(error.message || "Invalid polygon.");
+          }
+        });
+        marker.on("dragend", function () {
+          syncVertexMarkers(readCurrentGeometryForMap());
+        });
+      }
+      geometryVertexMarkers.push(marker);
+    });
   }
 
   function ensureGeometryLayers() {
@@ -655,7 +887,9 @@
 
   function renderSelectedGeometryOnMap(fitBounds) {
     const eventName = byId("field-event")?.value || currentAlerts()[selectedIndex]?.event || "";
-    renderGeometryOnMap(readCurrentGeometryForMap(), eventName, fitBounds !== false);
+    const geometry = readCurrentGeometryForMap();
+    renderGeometryOnMap(geometry, eventName, fitBounds !== false);
+    syncVertexMarkers(geometry);
   }
 
   function getTargetCenter() {
@@ -676,6 +910,7 @@
     const target = getTargetCenter();
     byId("geometry-zip").value = target.zip || "";
     setGeometryCenter(target.latitude, target.longitude, true);
+    updateRectanglePreview();
     setGeometryStatus("ZIP lookup not available yet; using metadata target coordinates.");
   }
 
@@ -693,14 +928,41 @@
     if (geometryMarker) {
       geometryMarker.setLngLat([lon, lat]);
     }
+    updateGeometryMarkerLabel();
     if (geometryMap && moveMap) {
       geometryMap.setCenter([lon, lat]);
     }
   }
 
   function handleMapCenterClick(latitude, longitude) {
+    if (geometryMode === "draw") {
+      addPolygonPoint(longitude, latitude);
+      return;
+    }
     setGeometryCenter(latitude, longitude, false);
-    setGeometryStatus("Map click set center point. Generate rectangle geometry to update the alert polygon.");
+    updateRectanglePreview();
+    setGeometryStatus("Map click set center point and updated the rectangle.");
+  }
+
+  function addPolygonPoint(longitude, latitude) {
+    const lon = Number(longitude);
+    const lat = Number(latitude);
+    if (!Number.isFinite(lon) || lon < -180 || lon > 180 || !Number.isFinite(lat) || lat < -90 || lat > 90) {
+      setGeometryStatus("Polygon point must be valid longitude/latitude.");
+      return;
+    }
+    geometryDrawPoints.push([lon, lat]);
+    if (geometryDrawPoints.length < 3) {
+      syncVertexMarkers(null);
+      setGeometryStatus(`Polygon needs ${3 - geometryDrawPoints.length} more point${geometryDrawPoints.length === 2 ? "" : "s"}.`);
+      return;
+    }
+    try {
+      const geometry = polygonFromPoints(geometryDrawPoints);
+      setGeometryField(geometry, "Polygon drawing updated.");
+    } catch (error) {
+      setGeometryStatus(error.message || "Invalid polygon.");
+    }
   }
 
   function initializeGeometryMap() {
@@ -714,6 +976,9 @@
     byId("geometry-zip").value = target.zip || "";
     if (!geometryMapClickFallbackWired) {
       document.addEventListener("click", function (event) {
+        if (geometryMap) {
+          return;
+        }
         const currentMapEl = byId("geometry-map");
         if (!currentMapEl || !currentMapEl.contains(event.target)) {
           return;
@@ -737,7 +1002,7 @@
       minZoom: 5,
       maxZoom: 16,
     });
-    geometryMarker = new window.mapboxgl.Marker({ color: "#dc2626" })
+    geometryMarker = new window.mapboxgl.Marker({ element: makeCenterMarkerElement(), anchor: "bottom" })
       .setLngLat([target.longitude, target.latitude])
       .addTo(geometryMap);
     geometryMap.on("click", function (event) {
@@ -771,6 +1036,49 @@
     handleMapCenterClick(lat, lon);
   }
 
+  function setGeometryMode(nextMode) {
+    geometryMode = nextMode;
+    byId("geometry-shape-type").value = nextMode === "draw" ? "polygon" : nextMode;
+    byId("geometry-half-width").disabled = nextMode !== "rectangle";
+    byId("draw-polygon").classList.toggle("is-active", nextMode === "draw");
+    byId("edit-polygon").classList.toggle("is-active", geometryEditEnabled);
+    if (nextMode !== "draw") {
+      geometryDrawPoints = [];
+    }
+    syncVertexMarkers(readCurrentGeometryForMap());
+  }
+
+  function startPolygonDrawing() {
+    geometryEditEnabled = false;
+    geometryDrawPoints = [];
+    setGeometryMode("draw");
+    setGeometryField(null, "");
+    setGeometryStatus("Draw polygon: click at least three points on the map.");
+  }
+
+  function togglePolygonEditing() {
+    const geometry = readCurrentGeometryForMap();
+    if (!geometry) {
+      setGeometryStatus("Draw or load a polygon before editing.");
+      return;
+    }
+    if (!validateGeometryForUi(geometry)) {
+      return;
+    }
+    geometryEditEnabled = !geometryEditEnabled;
+    setGeometryMode("polygon");
+    setGeometryStatus(geometryEditEnabled ? "Edit polygon: drag numbered points to adjust the shape." : "Polygon edit mode off.");
+  }
+
+  function clearGeometry() {
+    geometryDrawPoints = [];
+    geometryEditEnabled = false;
+    setGeometryMode("rectangle");
+    setGeometryField(null, "");
+    clearVertexMarkers();
+    setGeometryStatus("Geometry cleared.");
+  }
+
   function selectAlert(index) {
     const alert = currentAlerts()[index];
     if (!alert) {
@@ -787,7 +1095,13 @@
     byId("field-geometry").value = prettyJson(alert.geometry);
     byId("field-parameters").value = prettyJson(alert.parameters || {});
     renderParameterFields(alert.parameters || {});
+    geometryDrawPoints = [];
+    geometryEditEnabled = false;
     setGeometryFriendlyFields(alert.geometry);
+    geometryMode = byId("geometry-shape-type").value;
+    byId("geometry-half-width").disabled = geometryMode !== "rectangle";
+    byId("draw-polygon").classList.remove("is-active");
+    byId("edit-polygon").classList.remove("is-active");
     updateLocalTimes();
     renderTable();
     renderSelectedGeometryOnMap();
@@ -1068,18 +1382,6 @@
     byId("set-active-now").addEventListener("click", function () {
       setActiveNow().catch(showError);
     });
-    byId("generate-geometry").addEventListener("click", async function () {
-      try {
-        const geometry = generateRectangleGeometry();
-        const updated = applyFormToPayload();
-        renderGeometryOnMap(geometry, updated.event, true);
-        setStatus("Rectangle geometry generated and saving");
-        await saveAll({ applyForm: false, keepSelectedId: updated.id });
-        renderSelectedGeometryOnMap(false);
-      } catch (error) {
-        showError(error);
-      }
-    });
     byId("use-target-center").addEventListener("click", function () {
       try {
         useTargetCenter();
@@ -1088,8 +1390,23 @@
         showError(error);
       }
     });
-    byId("set-center-from-map").addEventListener("click", function () {
-      setGeometryStatus("Click the map to set the center point.");
+    byId("draw-polygon").addEventListener("click", startPolygonDrawing);
+    byId("edit-polygon").addEventListener("click", togglePolygonEditing);
+    byId("clear-geometry").addEventListener("click", clearGeometry);
+    byId("geometry-shape-type").addEventListener("change", function () {
+      geometryEditEnabled = false;
+      setGeometryMode(byId("geometry-shape-type").value);
+      if (geometryMode === "rectangle") {
+        updateRectanglePreview();
+      } else {
+        setGeometryStatus("Polygon mode selected. Use Draw Polygon or Edit Polygon.");
+      }
+    });
+    ["geometry-center-lat", "geometry-center-lon", "geometry-half-width"].forEach(function (id) {
+      byId(id).addEventListener("input", function () {
+        updateGeometryMarkerLabel();
+        updateRectanglePreview();
+      });
     });
     byId("field-effective").addEventListener("input", updateLocalTimes);
     byId("field-expires").addEventListener("input", updateLocalTimes);
@@ -1097,7 +1414,18 @@
       renderSelectedGeometryOnMap(false);
     });
     byId("field-geometry").addEventListener("input", function () {
+      if (suppressGeometryFieldInput) {
+        return;
+      }
+      geometryDrawPoints = [];
+      geometryEditEnabled = false;
       renderSelectedGeometryOnMap(false);
+      const geometry = readCurrentGeometryForMap();
+      if (geometry) {
+        setGeometryFriendlyFields(geometry);
+        setGeometryMode(isRectangleGeometry(geometry) ? "rectangle" : "polygon");
+        validateGeometryForUi(geometry);
+      }
     });
     byId("disable-alert").addEventListener("click", function () { disableSelected().catch(showError); });
     byId("clone-alert").addEventListener("click", function () { cloneAlert(selectedIndex).catch(showError); });

@@ -80,26 +80,14 @@
   <section class="editor-grid">
     <div class="alert-list-panel">
       <h2>Alerts</h2>
-      <div class="alert-table-wrap">
-        <table class="editor-table alerts-table">
-          <thead>
-            <tr>
-              <th><button type="button" class="sort-header" data-sort-key="id">ID <span data-sort-indicator="id"></span></button></th>
-              <th><button type="button" class="sort-header" data-sort-key="event">Event <span data-sort-indicator="event"></span></button></th>
-              <th><button type="button" class="sort-header" data-sort-key="source">Source <span data-sort-indicator="source"></span></button></th>
-              <th><button type="button" class="sort-header" data-sort-key="enabled">Enabled <span data-sort-indicator="enabled"></span></button></th>
-              <th><button type="button" class="sort-header" data-sort-key="severity">Severity <span data-sort-indicator="severity"></span></button></th>
-              <th><button type="button" class="sort-header" data-sort-key="urgency">Urgency <span data-sort-indicator="urgency"></span></button></th>
-              <th><button type="button" class="sort-header" data-sort-key="certainty">Certainty <span data-sort-indicator="certainty"></span></button></th>
-              <th><button type="button" class="sort-header" data-sort-key="areaDesc">Area Description / Counties <span data-sort-indicator="areaDesc"></span></button></th>
-              <th><button type="button" class="sort-header" data-sort-key="effective">Effective <span data-sort-indicator="effective"></span></button></th>
-              <th><button type="button" class="sort-header" data-sort-key="expires">Expires <span data-sort-indicator="expires"></span></button></th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="test-alert-table"></tbody>
-        </table>
+      <div class="alert-list-sortbar" aria-label="Alert sort controls">
+        <button type="button" class="sort-header" data-sort-key="id">ID <span data-sort-indicator="id"></span></button>
+        <button type="button" class="sort-header" data-sort-key="event">Event <span data-sort-indicator="event"></span></button>
+        <button type="button" class="sort-header" data-sort-key="severity">Severity <span data-sort-indicator="severity"></span></button>
+        <button type="button" class="sort-header" data-sort-key="effective">Effective <span data-sort-indicator="effective"></span></button>
+        <button type="button" class="sort-header" data-sort-key="expires">Expires <span data-sort-indicator="expires"></span></button>
       </div>
+      <div id="test-alert-table" class="test-alert-list" aria-live="polite"></div>
     </div>
 
     <form id="test-alert-form" class="alert-form">
@@ -145,24 +133,25 @@
       <section class="editor-subsection">
         <h3>Geometry</h3>
         <div class="form-row">
-          <label>Shape type<select id="geometry-shape-type"><option value="rectangle">rectangle</option></select></label>
+          <label>Shape type<select id="geometry-shape-type"><option value="rectangle">rectangle</option><option value="polygon">polygon</option></select></label>
           <label>Half-width miles<input id="geometry-half-width" type="number" min="0.1" step="0.1" value="3"></label>
         </div>
         <div class="form-row">
           <label>ZIP / target center<input id="geometry-zip" placeholder="49002"></label>
           <div class="geometry-button-row">
             <button type="button" id="use-target-center">Use ZIP/default center</button>
-            <button type="button" id="set-center-from-map">Set center from map click</button>
+            <button type="button" id="draw-polygon">Draw Polygon</button>
+            <button type="button" id="edit-polygon">Edit Polygon</button>
+            <button type="button" id="clear-geometry" class="danger-action">Clear Geometry</button>
           </div>
         </div>
         <div class="form-row">
           <label>Center latitude (-90 to 90)<input id="geometry-center-lat" type="number" min="-90" max="90" step="0.000001"></label>
           <label>Center longitude (-180 to 180)<input id="geometry-center-lon" type="number" min="-180" max="180" step="0.000001"></label>
         </div>
-        <p class="field-help">Generated GeoJSON uses coordinates in [longitude, latitude] order.</p>
+        <p class="field-help">Click the map to set the rectangle center. Draw mode creates a closed GeoJSON polygon from map clicks.</p>
         <div id="geometry-map" class="geometry-map" aria-label="Geometry map"></div>
         <p id="geometry-map-status" class="field-help">Click the map to set the center point. ZIP lookup uses metadata target coordinates for now.</p>
-        <button type="button" id="generate-geometry">Generate Rectangle Geometry</button>
         <details class="advanced-json">
           <summary>Advanced JSON</summary>
           <label>Raw Geometry JSON<textarea id="field-geometry" class="json-field" rows="10" spellcheck="false"></textarea></label>
