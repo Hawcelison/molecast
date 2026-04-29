@@ -6,16 +6,16 @@ from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
 
+from app.alerts.matcher import match_alert_to_location
 from app.alerts.models import MolecastAlert
 from app.alerts.normalize import normalize_nws_feature_collection
+from app.alerts.scoring import score_alert, sort_alerts_by_priority
+from app.alerts.test_alert_loader import TestAlertLoader
 from app.config import Settings, settings
 from app.logging_config import get_logger
 from app.models.location import Location
 from app.schemas.alert import WeatherAlert
-from app.services.alert_matcher import match_alert_to_location
-from app.services.alert_scoring import score_alert, sort_alerts_by_priority
 from app.services.alert_time import has_invalid_alert_time, now_utc, parse_alert_time_utc
-from app.services.test_alert_loader import TestAlertLoader
 
 
 class AlertFetchError(RuntimeError):

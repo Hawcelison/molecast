@@ -1,0 +1,7 @@
+efa0118 (HEAD -> main, origin/main) Session 9C: centralize NWS alert colors
+0d47ed6 Session 8: harden test alert validation
+b1d990a Session 5: geometry editor with draw/edit/clear + live preview
+196dccf Fix alert editor rendering + ignore logs
+1390b34 Add gitignore and remove generated files
+5e92b34 Initial Molecast baseline
+c44bf29 Initial Molecast baseline

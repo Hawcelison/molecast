@@ -9,7 +9,6 @@ from app.alerts.scoring import (
     score_alert,
     sort_alerts_by_priority,
 )
-from app.services.alert_scoring import score_alert as compatibility_score_alert
 
 
 def test_score_alert_preserves_severity_urgency_certainty_ranking() -> None:
@@ -30,12 +29,13 @@ def test_score_alert_normalizes_unknown_values() -> None:
     assert rank_alert_value("Observed", CERTAINTY_RANKS) == 5
 
 
-def test_service_alert_scoring_remains_compatible() -> None:
-    assert compatibility_score_alert("Extreme", "Immediate", "Observed") == score_alert(
-        "Extreme",
-        "Immediate",
-        "Observed",
-    )
+def test_score_alert_extreme_immediate_observed_priority_remains_stable() -> None:
+    priority = score_alert("Extreme", "Immediate", "Observed")
+
+    assert priority.priority_score == 555
+    assert priority.severity_rank == 5
+    assert priority.urgency_rank == 5
+    assert priority.certainty_rank == 5
 
 
 def test_sort_alerts_by_priority_preserves_existing_ordering() -> None:
@@ -55,4 +55,3 @@ def test_sort_alerts_by_priority_preserves_existing_ordering() -> None:
     )
 
     assert sort_alerts_by_priority([low, high]) == [high, low]
-

@@ -1,0 +1,5 @@
+[33m623bac8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32maudit/pre-cleanup-codex-refactor-20260429-111601[m[33m)[m Refactor: modular alert architecture (alerts package, frontend modules, scoring wrapper, service updates, tests, audit baseline)
+[33mefa0118[m[33m ([m[1;31morigin/main[m[33m, [m[1;32mmain[m[33m)[m Session 9C: centralize NWS alert colors
+[33m0d47ed6[m Session 8: harden test alert validation
+[33mb1d990a[m Session 5: geometry editor with draw/edit/clear + live preview
+[33m196dccf[m Fix alert editor rendering + ignore logs

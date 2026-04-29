@@ -1,12 +1,12 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from app.schemas.alert import WeatherAlert
-from app.services.alert_presentation import (
+from app.alerts.presentation import (
     build_alert_presentation,
     build_alert_presentations,
     build_expires_in,
 )
+from app.schemas.alert import WeatherAlert
 
 
 def _location() -> SimpleNamespace:

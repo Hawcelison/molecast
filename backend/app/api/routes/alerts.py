@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.dependencies import get_db
+from app.alerts.presentation import build_alert_presentations
 from app.schemas.alert import ActiveAlertsResponse
 from app.services import location_service
-from app.services.alert_presentation import build_alert_presentations
 from app.services.alert_service import AlertFetchError, active_alert_service
 
 

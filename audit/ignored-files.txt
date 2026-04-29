@@ -1,0 +1,3 @@
+data/logs/molecast.log
+data/logs/molecast.log.2026-04-28
+test/alerts_test.json.bak
