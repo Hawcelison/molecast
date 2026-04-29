@@ -1,13 +1,27 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class AlertMatchMetadata(BaseModel):
     match_type: str
     matched_value: str
     confidence: str
+
+
+class NwsAlertDetails(BaseModel):
+    tornadoDetection: str | list[str] | None = None
+    tornadoDamageThreat: str | list[str] | None = None
+    thunderstormDamageThreat: str | list[str] | None = None
+    hailSize: str | list[str] | None = None
+    maxHailSize: str | list[str] | None = None
+    windGust: str | list[str] | None = None
+    maxWindGust: str | list[str] | None = None
+    eventMotionDescription: str | list[str] | None = None
+    eventEndingTime: str | list[str] | None = None
+    VTEC: str | list[str] | None = None
+    WEAHandling: str | list[str] | None = None
 
 
 class WeatherAlert(BaseModel):
@@ -33,6 +47,7 @@ class WeatherAlert(BaseModel):
     severity_rank: int
     urgency_rank: int
     certainty_rank: int
+    nws_details: NwsAlertDetails = Field(default_factory=NwsAlertDetails)
 
     @field_validator("effective", "expires")
     @classmethod

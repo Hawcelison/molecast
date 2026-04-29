@@ -6,6 +6,7 @@ from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
 
+from app.alerts.details import build_nws_details
 from app.alerts.matcher import match_alert_to_location
 from app.alerts.models import MolecastAlert
 from app.alerts.normalize import normalize_nws_feature_collection
@@ -451,6 +452,7 @@ def _weather_alert_data(normalized_alert: MolecastAlert, match: Any, ranking: An
         "severity_rank": ranking.severity_rank,
         "urgency_rank": ranking.urgency_rank,
         "certainty_rank": ranking.certainty_rank,
+        "nws_details": build_nws_details(normalized_alert.parameters),
     }
 
 

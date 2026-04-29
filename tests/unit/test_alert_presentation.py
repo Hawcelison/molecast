@@ -46,6 +46,10 @@ def _alert(**overrides) -> WeatherAlert:
         "severity_rank": 4,
         "urgency_rank": 4,
         "certainty_rank": 4,
+        "nws_details": {
+            "tornadoDetection": "OBSERVED",
+            "tornadoDamageThreat": "CONSIDERABLE",
+        },
     }
     data.update(overrides)
     return WeatherAlert.model_validate(data)
@@ -67,6 +71,7 @@ def test_build_alert_presentation_preserves_original_fields() -> None:
     assert presentation.expires == alert.expires
     assert presentation.raw_properties == alert.raw_properties
     assert presentation.match == alert.match
+    assert presentation.nws_details == alert.nws_details
 
 
 def test_build_alert_presentation_adds_ui_ready_fields() -> None:
@@ -81,6 +86,7 @@ def test_build_alert_presentation_adds_ui_ready_fields() -> None:
     assert presentation.expires_in == "1 hour 30 minutes"
     assert presentation.severity_color == "severity-extreme"
     assert presentation.tags == ["OBSERVED", "RADAR", "PDS"]
+    assert presentation.nws_details.tornadoDetection == "OBSERVED"
 
 
 def test_build_alert_presentation_detects_tags_from_raw_properties() -> None:

@@ -39,6 +39,12 @@ def _normalized_feature() -> dict:
                 "SAME": ["026077"],
                 "UGC": ["MIC077", "MIZ072"],
             },
+            "parameters": {
+                "tornadoDetection": ["OBSERVED"],
+                "tornadoDamageThreat": ["CONSIDERABLE"],
+                "eventMotionDescription": ["MOVING EAST AT 35 MPH"],
+                "VTEC": ["/O.NEW.KGRR.TO.W.0049.260101T0000Z-260101T0100Z/"],
+            },
         },
         "geometry": None,
     }
@@ -71,6 +77,10 @@ def test_normalized_alerts_flow_through_active_alerts_endpoint(monkeypatch) -> N
     assert alert["color_hex"] == "#FF0000"
     assert alert["icon"] == "tornado"
     assert alert["sound_profile"] == "tornado"
+    assert alert["nws_details"]["tornadoDetection"] == "OBSERVED"
+    assert alert["nws_details"]["tornadoDamageThreat"] == "CONSIDERABLE"
+    assert alert["nws_details"]["eventMotionDescription"] == "MOVING EAST AT 35 MPH"
+    assert alert["nws_details"]["VTEC"] == "/O.NEW.KGRR.TO.W.0049.260101T0000Z-260101T0100Z/"
     assert alert["raw_properties"]["priority"] == 1000
     assert alert["raw_properties"]["color_hex"] == "#FF0000"
     assert alert["raw_properties"]["icon"] == "tornado"
@@ -80,3 +90,29 @@ def test_normalized_alerts_flow_through_active_alerts_endpoint(monkeypatch) -> N
         "MIC077",
         "MIZ072",
     ]
+
+
+def test_test_alert_details_use_same_dto_shape() -> None:
+    feature = _normalized_feature()
+    feature["id"] = "test-detail-alert"
+    feature["properties"]["id"] = "test-detail-alert"
+    feature["properties"]["event"] = "Severe Thunderstorm Warning"
+    feature["properties"]["parameters"] = {
+        "thunderstormDamageThreat": ["CONSIDERABLE"],
+        "maxWindGust": ["070 MPH"],
+        "maxHailSize": ["1.75 IN"],
+        "WEAHandling": ["IMMEDIATE"],
+    }
+
+    alerts = parse_nws_alerts(
+        {"type": "FeatureCollection", "features": [feature]},
+        _location(),
+        source="test",
+    )
+    payload = alerts[0].model_dump(mode="json")
+
+    assert payload["source"] == "test"
+    assert payload["nws_details"]["thunderstormDamageThreat"] == "CONSIDERABLE"
+    assert payload["nws_details"]["maxWindGust"] == "070 MPH"
+    assert payload["nws_details"]["maxHailSize"] == "1.75 IN"
+    assert payload["nws_details"]["WEAHandling"] == "IMMEDIATE"

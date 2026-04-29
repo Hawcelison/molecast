@@ -130,6 +130,40 @@
     return getString(alert && alert[fieldName], "");
   }
 
+  function detailsValue(alert, fieldName) {
+    const details = alert && alert.nws_details;
+    if (!details || typeof details !== "object" || Array.isArray(details)) {
+      return "";
+    }
+    return displayDetailValue(details[fieldName]);
+  }
+
+  function displayDetailValue(value) {
+    if (Array.isArray(value)) {
+      return value.map(function (item) {
+        return getString(item, "");
+      }).filter(Boolean).join(", ");
+    }
+    return getString(value, "");
+  }
+
+  function appendNwsDetails(details, alert) {
+    const eventName = alertName(alert).toLowerCase();
+    if (eventName.includes("tornado")) {
+      appendDetail(details, "Tornado detection", detailsValue(alert, "tornadoDetection"));
+      appendDetail(details, "Tornado damage threat", detailsValue(alert, "tornadoDamageThreat"));
+    }
+    if (eventName.includes("severe thunderstorm")) {
+      appendDetail(details, "Thunderstorm damage threat", detailsValue(alert, "thunderstormDamageThreat"));
+      appendDetail(details, "Wind gust", detailsValue(alert, "maxWindGust") || detailsValue(alert, "windGust"));
+      appendDetail(details, "Hail size", detailsValue(alert, "maxHailSize") || detailsValue(alert, "hailSize"));
+    }
+    appendDetail(details, "Motion", detailsValue(alert, "eventMotionDescription"));
+    appendDetail(details, "Event ending", detailsValue(alert, "eventEndingTime"));
+    appendDetail(details, "VTEC", detailsValue(alert, "VTEC"));
+    appendDetail(details, "WEA handling", detailsValue(alert, "WEAHandling"));
+  }
+
   function instructionText(alert) {
     return detailText(alert, "instruction");
   }
@@ -318,6 +352,7 @@
     const details = createElement("dl", "alert-banner__details");
     details.id = detailsId;
     appendDetail(details, "Headline", detailText(alert, "headline") || alertName(alert));
+    appendNwsDetails(details, alert);
     appendDetail(details, "Description", detailText(alert, "description"));
     appendDetail(details, "Instruction", instructionText(alert));
     appendDetail(details, "Source", alert.source || "nws");
