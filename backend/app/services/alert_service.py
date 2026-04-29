@@ -17,6 +17,7 @@ from app.logging_config import get_logger
 from app.models.location import Location
 from app.schemas.alert import WeatherAlert
 from app.services.alert_time import has_invalid_alert_time, now_utc, parse_alert_time_utc
+from app.services.nws_points_service import extract_points_metadata, extract_zone_id
 
 
 class AlertFetchError(RuntimeError):
@@ -121,6 +122,14 @@ class NwsAlertProvider:
         return payload
 
     def _get_alert_zone_ids(self, location: Location) -> list[str]:
+        persisted_zone_ids = [
+            zone_id
+            for zone_id in (location.county_zone, location.forecast_zone, location.fire_weather_zone)
+            if zone_id
+        ]
+        if persisted_zone_ids:
+            return list(dict.fromkeys(persisted_zone_ids))
+
         metadata = self.get_points_metadata(location)
         if not metadata:
             return []
@@ -155,39 +164,6 @@ class NwsAlertProvider:
 
     def _get_location_key(self, location: Location) -> str:
         return f"{location.id}:{location.latitude}:{location.longitude}"
-
-
-POINT_METADATA_FIELDS = (
-    "forecastOffice",
-    "gridId",
-    "gridX",
-    "gridY",
-    "forecast",
-    "forecastHourly",
-    "forecastGridData",
-    "observationStations",
-    "county",
-    "forecastZone",
-    "fireWeatherZone",
-    "timeZone",
-    "radarStation",
-)
-
-
-def extract_points_metadata(payload: dict[str, Any]) -> dict[str, Any]:
-    properties = payload.get("properties", {})
-    if not isinstance(properties, dict):
-        return {}
-    return {field: properties.get(field) for field in POINT_METADATA_FIELDS if field in properties}
-
-
-def extract_zone_id(value: Any) -> str | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    parsed = urlparse(value.strip())
-    path = parsed.path if parsed.scheme else value.strip()
-    zone_id = path.rstrip("/").split("/")[-1].strip()
-    return zone_id or None
 
 
 def stable_alert_feature_id(feature: dict[str, Any]) -> str:

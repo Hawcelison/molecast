@@ -4,10 +4,12 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.dependencies import get_db
 from app.schemas.location import (
+    ActiveLocationDirectUpdate,
     ActiveLocationUpdate,
     LocationCreate,
     LocationDeleteResponse,
     LocationRead,
+    LocationStatus,
     ZipLookupResponse,
 )
 from app.services import location_service
@@ -24,7 +26,13 @@ def get_default_location(db: Session = Depends(get_db)):
 
 @router.get("/location/active", response_model=LocationRead)
 def get_active_location(db: Session = Depends(get_db)):
-    return location_service.get_active_location(db, settings)
+    location = location_service.get_active_location(db, settings)
+    return location_service.location_to_dict(location, settings)
+
+
+@router.get("/location/status", response_model=LocationStatus)
+def get_location_status(db: Session = Depends(get_db)):
+    return location_service.get_location_status(db, settings)
 
 
 @router.get("/location/lookup/{zip_code}", response_model=ZipLookupResponse)
@@ -56,7 +64,20 @@ def set_active_location(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Location not found.",
         )
-    return location
+    return location_service.location_to_dict(location, settings)
+
+
+@router.put("/location/active", response_model=LocationRead)
+def put_active_location(
+    payload: ActiveLocationDirectUpdate,
+    db: Session = Depends(get_db),
+):
+    location = location_service.set_active_location_from_payload(
+        db,
+        settings,
+        payload.model_dump(exclude_unset=True),
+    )
+    return location_service.location_to_dict(location, settings)
 
 
 @router.get("/locations", response_model=list[LocationRead])

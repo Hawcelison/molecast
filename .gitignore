@@ -25,3 +25,9 @@ secrets/
 Thumbs.db
 .vscode/
 data/logs/
+
+# Local runtime database files
+data/*.sqlite3
+data/*.sqlite3-*
+data/*.db
+data/*.db-*

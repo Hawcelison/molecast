@@ -1,5 +1,7 @@
 from collections.abc import Sequence
 
+from typing import Any
+
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
@@ -26,11 +28,20 @@ def get_location_by_zip_code(db: Session, zip_code: str) -> Location | None:
     return db.scalars(select(Location).where(Location.zip_code == zip_code)).first()
 
 
-def create_location(db: Session, location_data: dict[str, str | float | bool]) -> Location:
+def create_location(db: Session, location_data: dict[str, Any]) -> Location:
     if location_data.get("is_primary"):
         _clear_primary_locations(db)
 
     location = Location(**location_data)
+    db.add(location)
+    db.commit()
+    db.refresh(location)
+    return location
+
+
+def update_location(db: Session, location: Location, location_data: dict[str, Any]) -> Location:
+    for key, value in location_data.items():
+        setattr(location, key, value)
     db.add(location)
     db.commit()
     db.refresh(location)
@@ -76,7 +87,7 @@ def ensure_single_primary_location(db: Session) -> Location | None:
 
 def ensure_location_exists(
     db: Session,
-    location_data: dict[str, str | float | bool],
+    location_data: dict[str, Any],
 ) -> Location:
     existing_location = get_location_by_zip_code(db, str(location_data["zip_code"]))
     if existing_location:

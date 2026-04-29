@@ -66,6 +66,10 @@ class Settings(BaseSettings):
         default=constants.DEFAULT_LOCATION_LONGITUDE,
         validation_alias="DEFAULT_LOCATION_LONGITUDE",
     )
+    default_location_zoom: int = Field(
+        default=constants.DEFAULT_LOCATION_ZOOM,
+        validation_alias="DEFAULT_LOCATION_ZOOM",
+    )
     weather_refresh_seconds: int = Field(
         default=constants.WEATHER_REFRESH_SECONDS,
         validation_alias="WEATHER_REFRESH_SECONDS",
@@ -176,12 +180,14 @@ class Settings(BaseSettings):
     def default_location_data(self) -> dict[str, str | float | bool]:
         return {
             "label": self.default_location_display_name,
+            "name": self.default_location_display_name,
             "city": self.default_location_city,
             "state": self.default_location_state,
             "county": self.default_location_county,
             "zip_code": self.default_location_postal_code,
             "latitude": self.default_location_latitude,
             "longitude": self.default_location_longitude,
+            "default_zoom": self.default_location_zoom,
             "is_primary": True,
         }
 

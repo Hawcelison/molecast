@@ -234,3 +234,23 @@ def test_zone_failure_does_not_break_point_alert_fetch() -> None:
         "forecast-zone-alert",
     ]
     assert provider.zone_calls == ["MIC077", "MIZ072"]
+
+
+def test_persisted_location_zones_are_used_without_points_lookup() -> None:
+    location = _location()
+    location.county_zone = "MIC077"
+    location.forecast_zone = "MIZ072"
+    provider = FakeNwsAlertProvider(
+        point_payload=_payload(_feature("point-alert")),
+        zone_payloads={"MIC077": _payload(_feature("county-zone-alert"))},
+        points_error=True,
+    )
+
+    payload = provider.fetch_active_alerts(location)
+
+    assert [feature["properties"]["id"] for feature in payload["features"]] == [
+        "point-alert",
+        "county-zone-alert",
+    ]
+    assert provider.points_calls == 0
+    assert provider.zone_calls == ["MIC077", "MIZ072"]
