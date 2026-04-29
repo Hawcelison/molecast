@@ -6,7 +6,9 @@
     flashingDisabled: false,
     silencedAlertIds: [],
     acknowledgedAlertIds: [],
+    readAlertIds: [],
   });
+  const MAX_READ_ALERT_IDS = 200;
 
   const reducedMotionQuery = global.matchMedia
     ? global.matchMedia("(prefers-reduced-motion: reduce)")
@@ -32,6 +34,7 @@
       flashingDisabled: Boolean(settings.flashingDisabled),
       silencedAlertIds: normalizeIdArray(settings.silencedAlertIds),
       acknowledgedAlertIds: normalizeIdArray(settings.acknowledgedAlertIds),
+      readAlertIds: normalizeIdArray(settings.readAlertIds).slice(-MAX_READ_ALERT_IDS),
     };
   }
 
@@ -55,6 +58,7 @@
       ...currentSettings,
       silencedAlertIds: currentSettings.silencedAlertIds.slice(),
       acknowledgedAlertIds: currentSettings.acknowledgedAlertIds.slice(),
+      readAlertIds: currentSettings.readAlertIds.slice(),
     };
   }
 
@@ -116,12 +120,39 @@
     return removeId("acknowledgedAlertIds", alertId);
   }
 
+  function markAlertRead(alertId) {
+    return addId("readAlertIds", alertId);
+  }
+
+  function markAlertsRead(alertIds) {
+    const ids = normalizeIdArray(alertIds).slice(-MAX_READ_ALERT_IDS);
+    if (ids.length === 0) {
+      return getSettings();
+    }
+    return updateSettings({
+      readAlertIds: normalizeIdArray(currentSettings.readAlertIds.concat(ids)).slice(-MAX_READ_ALERT_IDS),
+    });
+  }
+
+  function syncReadAlertIds(activeAlertIds) {
+    const activeIds = new Set(normalizeIdArray(activeAlertIds));
+    return updateSettings({
+      readAlertIds: currentSettings.readAlertIds.filter(function (id) {
+        return activeIds.has(id);
+      }).slice(-MAX_READ_ALERT_IDS),
+    });
+  }
+
   function isAlertSilenced(alertId) {
     return hasId("silencedAlertIds", alertId);
   }
 
   function isAlertAcknowledged(alertId) {
     return hasId("acknowledgedAlertIds", alertId);
+  }
+
+  function isAlertRead(alertId) {
+    return hasId("readAlertIds", alertId);
   }
 
   function prefersReducedMotion() {
@@ -133,12 +164,16 @@
     acknowledgeAlert,
     getSettings,
     isAlertAcknowledged,
+    isAlertRead,
     isAlertSilenced,
+    markAlertRead,
+    markAlertsRead,
     prefersReducedMotion,
     setAlertAudioEnabled,
     setFlashingDisabled,
     setTestAudioEnabled,
     silenceAlert,
+    syncReadAlertIds,
     unacknowledgeAlert,
     unsilenceAlert,
     updateSettings,

@@ -141,7 +141,7 @@
       "parameters": {}
     },
     {
-      "enabled": false,
+      "enabled": true,
       "id": "test-severe-thunderstorm-warning-49002",
       "source": "test",
       "event": "Severe Thunderstorm Warning",
@@ -152,8 +152,8 @@
       "description": "This is a disabled local test alert for Severe Thunderstorm Warning behavior.",
       "instruction": "",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-29T13:33:26Z",
-      "expires": "2026-04-29T16:33:26Z",
+      "effective": "2026-04-29T18:02:43Z",
+      "expires": "2026-04-29T21:02:43Z",
       "geometry": {
         "type": "Polygon",
         "coordinates": [

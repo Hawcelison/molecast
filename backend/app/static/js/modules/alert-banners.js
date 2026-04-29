@@ -5,6 +5,8 @@
   let expandedAlertIds = new Set();
   let previousCanonicalIds = new Set();
   let lastRenderedAlerts = [];
+  let trayExpanded = false;
+  let hasRenderedAlerts = false;
 
   function createElement(tagName, className, text) {
     const element = document.createElement(tagName);
@@ -147,21 +149,122 @@
     return getString(value, "");
   }
 
+  function normalizedDetailText(value) {
+    return getString(value, "").replace(/\s+/g, " ").trim();
+  }
+
+  function addUniqueDetail(parts, value) {
+    const text = normalizedDetailText(value);
+    if (!text) {
+      return;
+    }
+
+    const duplicate = parts.some(function (part) {
+      return part.toLowerCase() === text.toLowerCase();
+    });
+    if (!duplicate) {
+      parts.push(text);
+    }
+  }
+
+  function detailNumberText(value) {
+    const text = normalizedDetailText(value);
+    const match = text.match(/\d+(?:\.\d+)?/);
+    return match ? match[0] : "";
+  }
+
+  function formatWindGust(value) {
+    const text = normalizedDetailText(value);
+    if (!text) {
+      return "";
+    }
+
+    const numberText = detailNumberText(text);
+    if (numberText) {
+      return `${Number.parseInt(numberText, 10)} mph`;
+    }
+    return text;
+  }
+
+  function formatHailSize(value) {
+    const text = normalizedDetailText(value);
+    if (!text) {
+      return "";
+    }
+
+    if (/hail/i.test(text)) {
+      return text;
+    }
+
+    const numberText = detailNumberText(text);
+    if (numberText) {
+      const numeric = Number.parseFloat(numberText);
+      const formatted = Number.isFinite(numeric) ? numeric.toFixed(2) : numberText;
+      return `${formatted} in hail`;
+    }
+    return `${text} hail`;
+  }
+
+  function compactMotionDetail(alert, maxLength) {
+    const motion = normalizedDetailText(detailsValue(alert, "eventMotionDescription"));
+    if (!motion || motion.length > maxLength) {
+      return "";
+    }
+    return motion;
+  }
+
+  function compactEndingDetail(alert) {
+    return normalizedDetailText(detailsValue(alert, "eventEndingTime"));
+  }
+
+  function compactNwsDetails(alert) {
+    const eventName = alertName(alert).toLowerCase();
+    const parts = [];
+
+    if (eventName.includes("tornado")) {
+      addUniqueDetail(parts, detailsValue(alert, "tornadoDetection"));
+      addUniqueDetail(parts, detailsValue(alert, "tornadoDamageThreat"));
+    } else if (eventName.includes("severe thunderstorm")) {
+      addUniqueDetail(parts, detailsValue(alert, "thunderstormDamageThreat"));
+      addUniqueDetail(parts, formatWindGust(detailsValue(alert, "maxWindGust") || detailsValue(alert, "windGust")));
+      addUniqueDetail(parts, formatHailSize(detailsValue(alert, "maxHailSize") || detailsValue(alert, "hailSize")));
+    } else if (eventName.includes("flash flood") || eventName.includes("flood")) {
+      addUniqueDetail(parts, compactMotionDetail(alert, 90) || compactEndingDetail(alert));
+    }
+
+    if (parts.length < 3) {
+      addUniqueDetail(parts, compactMotionDetail(alert, 90));
+    }
+
+    return parts.slice(0, 3).join(" · ");
+  }
+
   function appendNwsDetails(details, alert) {
     const eventName = alertName(alert).toLowerCase();
+    const usedValues = new Set();
+    function appendUniqueDetail(label, value) {
+      const text = normalizedDetailText(value);
+      const key = text.toLowerCase();
+      if (!text || usedValues.has(key)) {
+        return;
+      }
+      usedValues.add(key);
+      appendDetail(details, label, text);
+    }
+
     if (eventName.includes("tornado")) {
-      appendDetail(details, "Tornado detection", detailsValue(alert, "tornadoDetection"));
-      appendDetail(details, "Tornado damage threat", detailsValue(alert, "tornadoDamageThreat"));
+      appendUniqueDetail("Tornado detection", detailsValue(alert, "tornadoDetection"));
+      appendUniqueDetail("Tornado damage threat", detailsValue(alert, "tornadoDamageThreat"));
     }
     if (eventName.includes("severe thunderstorm")) {
-      appendDetail(details, "Thunderstorm damage threat", detailsValue(alert, "thunderstormDamageThreat"));
-      appendDetail(details, "Wind gust", detailsValue(alert, "maxWindGust") || detailsValue(alert, "windGust"));
-      appendDetail(details, "Hail size", detailsValue(alert, "maxHailSize") || detailsValue(alert, "hailSize"));
+      appendUniqueDetail("Thunderstorm damage threat", detailsValue(alert, "thunderstormDamageThreat"));
+      appendUniqueDetail("Wind gust", detailsValue(alert, "maxWindGust") || detailsValue(alert, "windGust"));
+      appendUniqueDetail("Hail size", detailsValue(alert, "maxHailSize") || detailsValue(alert, "hailSize"));
     }
-    appendDetail(details, "Motion", detailsValue(alert, "eventMotionDescription"));
-    appendDetail(details, "Event ending", detailsValue(alert, "eventEndingTime"));
-    appendDetail(details, "VTEC", detailsValue(alert, "VTEC"));
-    appendDetail(details, "WEA handling", detailsValue(alert, "WEAHandling"));
+    appendUniqueDetail("Motion", detailsValue(alert, "eventMotionDescription"));
+    appendUniqueDetail("Event ending", detailsValue(alert, "eventEndingTime"));
+    appendUniqueDetail("VTEC", detailsValue(alert, "VTEC"));
+    appendUniqueDetail("WEA handling", detailsValue(alert, "WEAHandling"));
   }
 
   function instructionText(alert) {
@@ -323,9 +426,74 @@
     expandedAlertIds.clear();
     previousCanonicalIds = new Set();
     lastRenderedAlerts = [];
+    trayExpanded = false;
+    hasRenderedAlerts = false;
     renderControls([]);
     container.replaceChildren();
     container.setAttribute("aria-live", "polite");
+  }
+
+  function alertIds(alerts) {
+    return alerts.map(function (alert, index) {
+      return canonicalId(alert, index);
+    });
+  }
+
+  function unreadAlertIds(alerts) {
+    return alertIds(alerts).filter(function (id) {
+      return !global.MolecastSettingsStore.isAlertRead(id);
+    });
+  }
+
+  function markVisibleAlertsRead(alerts) {
+    global.MolecastSettingsStore.markAlertsRead(alertIds(alerts));
+  }
+
+  function renderTrayToggle(alerts, unreadCount) {
+    const wrapper = createElement("div", "alert-tray-toggle-row");
+    wrapper.setAttribute("role", "listitem");
+
+    const button = createElement("button", "alert-tray-toggle");
+    const countText = alerts.length === 1 ? "1 active alert" : `${alerts.length} active alerts`;
+    const stateText = trayExpanded ? "Collapse details" : "Expand details";
+    button.type = "button";
+    button.setAttribute("aria-expanded", trayExpanded ? "true" : "false");
+    button.setAttribute("aria-controls", "alert-banner-items");
+    button.title = unreadCount > 0
+      ? `${unreadCount} unread ${unreadCount === 1 ? "alert" : "alerts"}`
+      : "No unread alerts";
+
+    const label = createElement("span", "alert-tray-toggle__label", `${stateText} - ${countText}`);
+    button.append(label);
+    if (unreadCount > 0) {
+      const badge = createElement("span", "alert-tray-toggle__badge", `${unreadCount} unread`);
+      badge.setAttribute("aria-label", `${unreadCount} unread ${unreadCount === 1 ? "alert" : "alerts"}`);
+      button.append(badge);
+    }
+
+    button.addEventListener("click", function () {
+      trayExpanded = !trayExpanded;
+      if (trayExpanded) {
+        markVisibleAlertsRead(lastRenderedAlerts);
+        expandedAlertIds = new Set(alertIds(lastRenderedAlerts));
+      } else {
+        expandedAlertIds.clear();
+      }
+      renderAlertTray(wrapper.parentElement, lastRenderedAlerts);
+    });
+
+    wrapper.append(button);
+    return wrapper;
+  }
+
+  function renderAlertTray(container, alerts) {
+    const unreadCount = unreadAlertIds(alerts).length;
+    const toggle = renderTrayToggle(alerts, unreadCount);
+    const items = createElement("div", "alert-banner-items");
+    items.id = "alert-banner-items";
+    items.replaceChildren(...alerts.map(renderAlertBanner));
+
+    container.replaceChildren(toggle, items);
   }
 
   function renderAlertBanner(alert, index) {
@@ -334,19 +502,35 @@
     const foregroundColor = textColorForHex(color);
     const expanded = expandedAlertIds.has(id);
     const detailsId = `alert-banner-details-${index}`;
+    const unread = !global.MolecastSettingsStore.isAlertRead(id);
 
     const item = createElement("article", "alert-banner");
     item.setAttribute("role", "listitem");
     item.setAttribute("tabindex", "0");
     item.setAttribute("aria-expanded", expanded ? "true" : "false");
     item.setAttribute("aria-controls", detailsId);
+    item.setAttribute("aria-label", unread ? `Unread ${compactText(alert)}` : compactText(alert));
+    if (unread) {
+      item.classList.add("alert-banner--unread");
+    }
     item.style.setProperty("--alert-accent", color);
     item.style.setProperty("--alert-fg", foregroundColor);
 
     const compact = createElement("div", "alert-banner__compact");
     const icon = createElement("span", "alert-banner__icon", global.MolecastAlertIcons.iconForAlert(alert));
+    const text = createElement("div", "alert-banner__text");
+    const compactDetails = compactNwsDetails(alert);
     icon.setAttribute("aria-hidden", "true");
-    compact.append(icon, createElement("strong", "alert-banner__title", compactText(alert)));
+    text.append(createElement("strong", "alert-banner__title", compactText(alert)));
+    if (compactDetails) {
+      text.append(createElement("span", "alert-banner__summary", compactDetails));
+    }
+    compact.append(icon, text);
+    if (unread) {
+      const badge = createElement("span", "alert-banner__unread", "Unread");
+      badge.title = "Unread alert";
+      compact.append(badge);
+    }
     item.append(compact);
 
     const details = createElement("dl", "alert-banner__details");
@@ -365,11 +549,15 @@
 
     item.addEventListener("click", function () {
       toggle(id, item);
+      global.MolecastSettingsStore.markAlertRead(id);
+      renderAlertTray(item.closest(".alert-banner-container"), lastRenderedAlerts);
     });
     item.addEventListener("keydown", function (event) {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         toggle(id, item);
+        global.MolecastSettingsStore.markAlertRead(id);
+        renderAlertTray(item.closest(".alert-banner-container"), lastRenderedAlerts);
       }
     });
 
@@ -412,7 +600,9 @@
       return [];
     }
 
-    const currentIds = new Set(usableAlerts.map(canonicalId));
+    global.MolecastSettingsStore.syncReadAlertIds(alertIds(usableAlerts));
+
+    const currentIds = new Set(alertIds(usableAlerts));
     const newAlertIds = Array.from(currentIds).filter(function (id) {
       return !previousCanonicalIds.has(id);
     });
@@ -426,21 +616,27 @@
       })
     );
 
-    newAlertIds.forEach(function (id) {
-      expandedAlertIds.add(id);
-    });
+    if (hasRenderedAlerts && newAlertIds.length > 0) {
+      trayExpanded = true;
+      expandedAlertIds = new Set(alertIds(usableAlerts));
+    }
 
     container.setAttribute("aria-live", usableAlerts.some(isAssertiveAlert) ? "assertive" : "polite");
-    container.replaceChildren(...usableAlerts.map(renderAlertBanner));
+    renderAlertTray(container, usableAlerts);
 
     if (newAlerts.length > 0) {
-      scrollToContainer(container);
+      if (hasRenderedAlerts) {
+        scrollToContainer(container);
+      }
       const high = newAlerts.find(isHighPriority);
       if (high) {
         global.MolecastAlertAudio.playForAlert(high);
       }
     }
 
+    // Read/unread is a tray visibility indicator only. Emergency audio and
+    // flashing stay tied to active alert severity plus explicit acknowledge,
+    // silence, and disable controls.
     evaluateFlash(usableAlerts);
 
     if (!usableAlerts.some(isHighPriority)) {
@@ -448,6 +644,7 @@
     }
 
     previousCanonicalIds = currentIds;
+    hasRenderedAlerts = true;
     return usableAlerts;
   }
 
