@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from app.models.location import Location
@@ -6,6 +7,7 @@ from app.services.alert_service import (
     AlertFetchError,
     AlertZoneFetchError,
     NwsAlertProvider,
+    dedupe_alerts_by_id,
     extract_points_metadata,
     extract_zone_id,
 )
@@ -180,6 +182,44 @@ def test_nws_failure_still_returns_test_alerts() -> None:
     assert alerts[0].source == "test"
 
 
+def test_merged_alert_dedupe_prefers_higher_priority() -> None:
+    low = SimpleNamespace(
+        id="shared-alert",
+        priority=625,
+        priority_score=625,
+        effective=datetime(2099, 1, 1, tzinfo=UTC),
+        expires=None,
+    )
+    high = SimpleNamespace(
+        id="shared-alert",
+        priority=1000,
+        priority_score=1000,
+        effective=datetime(2099, 1, 1, tzinfo=UTC),
+        expires=None,
+    )
+
+    assert dedupe_alerts_by_id([low, high]) == [high]
+
+
+def test_merged_alert_dedupe_prefers_newer_when_priority_matches() -> None:
+    older = SimpleNamespace(
+        id="shared-alert",
+        priority=625,
+        priority_score=625,
+        effective=datetime(2099, 1, 1, tzinfo=UTC),
+        expires=None,
+    )
+    newer = SimpleNamespace(
+        id="shared-alert",
+        priority=625,
+        priority_score=625,
+        effective=datetime(2099, 1, 2, tzinfo=UTC),
+        expires=None,
+    )
+
+    assert dedupe_alerts_by_id([older, newer]) == [newer]
+
+
 def test_zone_failure_does_not_break_point_alert_fetch() -> None:
     provider = FakeNwsAlertProvider(
         point_payload=_payload(_feature("point-alert")),
@@ -194,4 +234,3 @@ def test_zone_failure_does_not_break_point_alert_fetch() -> None:
         "forecast-zone-alert",
     ]
     assert provider.zone_calls == ["MIC077", "MIZ072"]
-

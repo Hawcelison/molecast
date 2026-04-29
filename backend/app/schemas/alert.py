@@ -25,6 +25,10 @@ class WeatherAlert(BaseModel):
     geometry: dict[str, Any] | None = None
     raw_properties: dict[str, Any]
     match: AlertMatchMetadata
+    color_hex: str
+    icon: str
+    sound_profile: str
+    priority: int
     priority_score: int
     severity_rank: int
     urgency_rank: int

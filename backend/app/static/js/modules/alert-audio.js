@@ -4,6 +4,9 @@
   const PROFILE_SOUNDS = Object.freeze({
     air_raid: "/static/sounds/airraid.mp3",
     ebs_purge: "/static/sounds/default.mp3",
+    default: "/static/sounds/default.mp3",
+    none: "",
+    tornado: "/static/sounds/tornado.mp3",
     standard_alert: "/static/sounds/default.mp3",
     tornado_siren: "/static/sounds/tornado.mp3",
   });
@@ -42,11 +45,18 @@
   function profileForAlert(alert) {
     const event = getString(alert && alert.event, "");
     const requested = getString(alert && (alert.sound_profile || alert.default_sound), "");
+    if (requested === "none") {
+      return "";
+    }
     if (requested && PROFILE_SOUNDS[requested] && profileAllowed(requested, alert)) {
       return requested;
     }
+    if (requested) {
+      return "";
+    }
+    // Temporary safety fallback for older API payloads without backend sound_profile.
     if (event === "Tornado Warning") {
-      return "tornado_siren";
+      return "tornado";
     }
     if (
       event === "Blizzard Warning" ||
@@ -55,7 +65,7 @@
       event === "Tropical Storm Warning" ||
       event === "Storm Surge Warning"
     ) {
-      return "standard_alert";
+      return "default";
     }
     if (
       isFutureTestSource(alert) &&

@@ -1,15 +1,6 @@
 (function (global) {
   const DEFAULT_ALERT_COLOR = "#3399FF";
-  const HIGH_PRIORITY_EVENTS = new Set([
-    "Tornado Warning",
-    "Flash Flood Warning",
-    "Civil Emergency Message",
-    "Presidential Alert",
-    "Hurricane Warning",
-    "Blizzard Warning",
-    "Extreme Wind Warning",
-    "Snow Squall Warning",
-  ]);
+  const HIGH_PRIORITY_THRESHOLD = 800;
 
   let expandedAlertIds = new Set();
   let previousCanonicalIds = new Set();
@@ -74,6 +65,7 @@
     if (alert && typeof alert.color_hex === "string" && /^#[0-9a-fA-F]{6}$/.test(alert.color_hex)) {
       return alert.color_hex;
     }
+    // Temporary safety fallback for older API payloads without backend color fields.
     if (global.getAlertColor) {
       return global.getAlertColor(alert);
     }
@@ -161,7 +153,7 @@
   }
 
   function isHighPriority(alert) {
-    return isAssertiveAlert(alert) || HIGH_PRIORITY_EVENTS.has(getString(alert && alert.event, ""));
+    return isAssertiveAlert(alert) || alertPriority(alert) >= HIGH_PRIORITY_THRESHOLD;
   }
 
   function isSevereOrExtreme(alert) {

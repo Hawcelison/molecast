@@ -41,6 +41,7 @@ def test_score_alert_extreme_immediate_observed_priority_remains_stable() -> Non
 def test_sort_alerts_by_priority_preserves_existing_ordering() -> None:
     low = SimpleNamespace(
         priority_score=111,
+        priority=111,
         severity_rank=1,
         urgency_rank=1,
         certainty_rank=1,
@@ -48,6 +49,7 @@ def test_sort_alerts_by_priority_preserves_existing_ordering() -> None:
     )
     high = SimpleNamespace(
         priority_score=455,
+        priority=455,
         severity_rank=4,
         urgency_rank=5,
         certainty_rank=5,

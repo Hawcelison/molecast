@@ -8,6 +8,7 @@ from typing import Any
 DEFAULT_COLOR_HEX = "#3399FF"
 DEFAULT_ICON = "alert-circle"
 DEFAULT_PRIORITY = 100
+DEFAULT_SOUND_PROFILE = "default"
 
 SEVERITY_COLOR_FALLBACKS = {
     "extreme": "#FF0000",
@@ -74,6 +75,13 @@ def get_event_icon(event_name: str | None) -> str:
     return DEFAULT_ICON
 
 
+def get_event_sound_profile(event_name: str | None) -> str:
+    entry = get_hazard_entry(event_name)
+    if entry and isinstance(entry.get("default_sound"), str):
+        return entry["default_sound"]
+    return DEFAULT_SOUND_PROFILE
+
+
 def _normalize_event_name(value: str) -> str:
     return " ".join(value.strip().lower().split())
 
@@ -82,4 +90,3 @@ def _normalize_alert_value(value: str | None) -> str:
     if value is None:
         return "unknown"
     return value.strip().lower() or "unknown"
-

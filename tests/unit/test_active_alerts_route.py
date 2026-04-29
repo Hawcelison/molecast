@@ -66,10 +66,15 @@ def test_normalized_alerts_flow_through_active_alerts_endpoint(monkeypatch) -> N
     assert [alert["id"] for alert in payload["alerts"]] == ["normalized-route-alert"]
 
     alert = payload["alerts"][0]
+    assert alert["priority"] == 1000
     assert alert["priority_score"] == 1000
+    assert alert["color_hex"] == "#FF0000"
+    assert alert["icon"] == "tornado"
+    assert alert["sound_profile"] == "tornado"
     assert alert["raw_properties"]["priority"] == 1000
     assert alert["raw_properties"]["color_hex"] == "#FF0000"
     assert alert["raw_properties"]["icon"] == "tornado"
+    assert alert["raw_properties"]["sound_profile"] == "tornado"
     assert alert["raw_properties"]["normalized_geocode"]["same"][0]["original"] == "026077"
     assert [ugc["original"] for ugc in alert["raw_properties"]["normalized_geocode"]["ugc"]] == [
         "MIC077",

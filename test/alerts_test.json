@@ -15,7 +15,7 @@
   },
   "alerts": [
     {
-      "enabled": true,
+      "enabled": false,
       "id": "test-tornado-warning-fireside-49002",
       "source": "test",
       "event": "Tornado Warning",

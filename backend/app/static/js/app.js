@@ -20,6 +20,7 @@
     if (alert && typeof alert.color_hex === "string" && /^#[0-9a-fA-F]{6}$/.test(alert.color_hex)) {
       return alert.color_hex;
     }
+    // Temporary safety fallback for older API payloads without backend color fields.
     if (window.getAlertColor) {
       return window.getAlertColor(alert);
     }

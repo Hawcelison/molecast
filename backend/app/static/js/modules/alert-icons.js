@@ -49,6 +49,10 @@
     if (alert.icon && typeof alert.icon === "string" && alert.icon.length <= 3) {
       return alert.icon;
     }
+    if (alert.icon) {
+      return "!";
+    }
+    // Temporary safety fallback for older API payloads without backend icon fields.
     if (alert.event && EVENT_ICONS[alert.event]) {
       return EVENT_ICONS[alert.event];
     }
@@ -59,4 +63,3 @@
     iconForAlert,
   };
 })(window);
-

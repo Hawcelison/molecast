@@ -10,6 +10,7 @@ from app.alerts.catalog import (
     get_event_color,
     get_event_icon,
     get_event_priority,
+    get_event_sound_profile,
     get_hazard_entry,
 )
 from app.alerts.geocodes import normalize_geocodes
@@ -121,7 +122,7 @@ def normalize_nws_feature(feature: dict, source: str = "nws") -> MolecastAlert:
         "color_hex": get_event_color(event_name, severity),
         "color_name": _string_or_none(hazard_entry.get("color_name")),
         "icon": get_event_icon(event_name) or DEFAULT_ICON,
-        "sound_profile": _string_or_none(hazard_entry.get("default_sound")) or "default",
+        "sound_profile": get_event_sound_profile(event_name),
         "headline": _string_or_none(properties.get("headline")),
         "description": _string_or_none(properties.get("description")),
         "instruction": _string_or_none(properties.get("instruction")),
@@ -238,4 +239,3 @@ def _to_plain_data(value: Any) -> Any:
     if isinstance(value, list):
         return [_to_plain_data(item) for item in value]
     return value
-

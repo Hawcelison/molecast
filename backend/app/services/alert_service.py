@@ -289,7 +289,7 @@ class ActiveAlertService:
         else:
             live_alerts = parse_nws_alerts(live_payload, location, source="nws")
 
-        return sort_alerts_by_priority([*live_alerts, *test_alerts])
+        return sort_alerts_by_priority(dedupe_alerts_by_id([*live_alerts, *test_alerts]))
 
 
 def parse_nws_alerts(
@@ -417,8 +417,12 @@ def _weather_alert_data(normalized_alert: MolecastAlert, match: Any, ranking: An
         raw_properties["icon"] = normalized_alert.icon
     if normalized_alert.priority is not None:
         raw_properties["priority"] = normalized_alert.priority
+    if normalized_alert.sound_profile is not None:
+        raw_properties["sound_profile"] = normalized_alert.sound_profile
     if normalized_alert.geocode is not None:
         raw_properties["normalized_geocode"] = normalized_alert.geocode
+
+    priority = normalized_alert.priority or ranking.priority_score
 
     return {
         "id": normalized_alert.id,
@@ -439,11 +443,43 @@ def _weather_alert_data(normalized_alert: MolecastAlert, match: Any, ranking: An
             "matched_value": match.matched_value,
             "confidence": match.confidence,
         },
-        "priority_score": normalized_alert.priority or ranking.priority_score,
+        "color_hex": normalized_alert.color_hex,
+        "icon": normalized_alert.icon,
+        "sound_profile": normalized_alert.sound_profile,
+        "priority": priority,
+        "priority_score": priority,
         "severity_rank": ranking.severity_rank,
         "urgency_rank": ranking.urgency_rank,
         "certainty_rank": ranking.certainty_rank,
     }
+
+
+def dedupe_alerts_by_id(alerts: list[WeatherAlert]) -> list[WeatherAlert]:
+    deduped: dict[str, WeatherAlert] = {}
+    order: list[str] = []
+    for alert in alerts:
+        existing = deduped.get(alert.id)
+        if existing is None:
+            deduped[alert.id] = alert
+            order.append(alert.id)
+            continue
+        deduped[alert.id] = choose_preferred_alert(existing, alert)
+    return [deduped[alert_id] for alert_id in order]
+
+
+def choose_preferred_alert(current: WeatherAlert, candidate: WeatherAlert) -> WeatherAlert:
+    if candidate.priority > current.priority:
+        return candidate
+    if candidate.priority < current.priority:
+        return current
+
+    candidate_time = candidate.effective or candidate.expires
+    current_time = current.effective or current.expires
+    if candidate_time and current_time and candidate_time > current_time:
+        return candidate
+    if candidate_time and current_time is None:
+        return candidate
+    return current
 
 
 def is_alert_expired(expires: Any, now: datetime | None = None) -> bool:
