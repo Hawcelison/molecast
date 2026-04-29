@@ -24,6 +24,13 @@ class NwsAlertDetails(BaseModel):
     WEAHandling: str | list[str] | None = None
 
 
+class GeometryBounds(BaseModel):
+    west: float
+    south: float
+    east: float
+    north: float
+
+
 class WeatherAlert(BaseModel):
     id: str
     source: str
@@ -34,6 +41,7 @@ class WeatherAlert(BaseModel):
     headline: str | None = None
     description: str | None = None
     areaDesc: str | None = None
+    affectedZones: list[str] | None = None
     effective: datetime | None = None
     expires: datetime | None = None
     geometry: dict[str, Any] | None = None
@@ -65,6 +73,7 @@ class AlertPresentation(WeatherAlert):
     expires_in: str
     severity_color: str
     tags: list[str]
+    geometry_bounds: GeometryBounds | None = None
 
 
 class ActiveAlertsResponse(BaseModel):

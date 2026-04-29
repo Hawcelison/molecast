@@ -26,8 +26,8 @@
       "description": "TEST tornado warning centered near 4222 Fireside Ave, Portage, MI 49002.",
       "instruction": "TAKE COVER NOW. Move to a basement or interior room on the lowest floor.",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-29T17:02:09Z",
-      "expires": "2026-04-29T20:02:09Z",
+      "effective": "2026-04-29T20:10:42Z",
+      "expires": "2026-04-29T23:10:42Z",
       "geometry": {
         "type": "Polygon",
         "coordinates": [

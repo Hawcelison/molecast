@@ -548,20 +548,29 @@
     item.append(details);
 
     item.addEventListener("click", function () {
-      toggle(id, item);
-      global.MolecastSettingsStore.markAlertRead(id);
-      renderAlertTray(item.closest(".alert-banner-container"), lastRenderedAlerts);
+      activateAlertRow(id, alert, item);
     });
     item.addEventListener("keydown", function (event) {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        toggle(id, item);
-        global.MolecastSettingsStore.markAlertRead(id);
-        renderAlertTray(item.closest(".alert-banner-container"), lastRenderedAlerts);
+        activateAlertRow(id, alert, item);
       }
     });
 
     return item;
+  }
+
+  function activateAlertRow(id, alert, item) {
+    toggle(id, item);
+    global.MolecastSettingsStore.markAlertRead(id);
+    dispatchAlertSelected(id, alert);
+    renderAlertTray(item.closest(".alert-banner-container"), lastRenderedAlerts);
+  }
+
+  function dispatchAlertSelected(alertId, alert) {
+    document.dispatchEvent(new CustomEvent("molecast:alert-selected", {
+      detail: { alertId, alert },
+    }));
   }
 
   function toggle(id, item) {

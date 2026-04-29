@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from app.api.routes import alerts as alerts_route
+from app.alerts.presentation import build_alert_presentation
 from app.models.location import Location
 from app.schemas.alert import ActiveAlertsResponse
 from app.services.alert_service import parse_nws_alerts
@@ -33,6 +34,7 @@ def _normalized_feature() -> dict:
             "headline": "Tornado Warning headline",
             "description": "Tornado Warning description",
             "areaDesc": "Kalamazoo",
+            "affectedZones": ["https://api.weather.gov/zones/county/MIC077"],
             "effective": "2026-01-01T00:00:00Z",
             "expires": "2099-01-01T00:00:00Z",
             "geocode": {
@@ -46,7 +48,18 @@ def _normalized_feature() -> dict:
                 "VTEC": ["/O.NEW.KGRR.TO.W.0049.260101T0000Z-260101T0100Z/"],
             },
         },
-        "geometry": None,
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [-85.7, 42.1],
+                    [-85.4, 42.1],
+                    [-85.4, 42.3],
+                    [-85.7, 42.3],
+                    [-85.7, 42.1],
+                ]
+            ],
+        },
     }
 
 
@@ -77,6 +90,15 @@ def test_normalized_alerts_flow_through_active_alerts_endpoint(monkeypatch) -> N
     assert alert["color_hex"] == "#FF0000"
     assert alert["icon"] == "tornado"
     assert alert["sound_profile"] == "tornado"
+    assert alert["areaDesc"] == "Kalamazoo"
+    assert alert["affectedZones"] == ["https://api.weather.gov/zones/county/MIC077"]
+    assert alert["geometry"]["type"] == "Polygon"
+    assert alert["geometry_bounds"] == {
+        "west": -85.7,
+        "south": 42.1,
+        "east": -85.4,
+        "north": 42.3,
+    }
     assert alert["nws_details"]["tornadoDetection"] == "OBSERVED"
     assert alert["nws_details"]["tornadoDamageThreat"] == "CONSIDERABLE"
     assert alert["nws_details"]["eventMotionDescription"] == "MOVING EAST AT 35 MPH"
@@ -110,8 +132,17 @@ def test_test_alert_details_use_same_dto_shape() -> None:
         source="test",
     )
     payload = alerts[0].model_dump(mode="json")
+    presentation = build_alert_presentation(alerts[0], _location()).model_dump(mode="json")
 
     assert payload["source"] == "test"
+    assert payload["geometry"]["type"] == "Polygon"
+    assert payload["affectedZones"] == ["https://api.weather.gov/zones/county/MIC077"]
+    assert presentation["geometry_bounds"] == {
+        "west": -85.7,
+        "south": 42.1,
+        "east": -85.4,
+        "north": 42.3,
+    }
     assert payload["nws_details"]["thunderstormDamageThreat"] == "CONSIDERABLE"
     assert payload["nws_details"]["maxWindGust"] == "070 MPH"
     assert payload["nws_details"]["maxHailSize"] == "1.75 IN"

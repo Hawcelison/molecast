@@ -167,6 +167,8 @@
       }
     });
 
+    window.dispatchEvent(new CustomEvent("molecast:radar-layers-updated"));
+
     if (frames.length > 0) {
       showFrame(frames.length - 1);
       if (shouldAutoAnimate(config)) {

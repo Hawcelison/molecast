@@ -435,6 +435,7 @@ def _weather_alert_data(normalized_alert: MolecastAlert, match: Any, ranking: An
         "headline": normalized_alert.headline,
         "description": normalized_alert.description,
         "areaDesc": normalized_alert.areaDesc,
+        "affectedZones": normalized_alert.affectedZones,
         "effective": normalized_alert.effective,
         "expires": normalized_alert.expires,
         "geometry": normalized_alert.geometry,

@@ -69,6 +69,7 @@ def test_build_alert_presentation_preserves_original_fields() -> None:
     assert presentation.event == alert.event
     assert presentation.effective == alert.effective
     assert presentation.expires == alert.expires
+    assert presentation.geometry == alert.geometry
     assert presentation.raw_properties == alert.raw_properties
     assert presentation.match == alert.match
     assert presentation.nws_details == alert.nws_details
@@ -87,6 +88,93 @@ def test_build_alert_presentation_adds_ui_ready_fields() -> None:
     assert presentation.severity_color == "severity-extreme"
     assert presentation.tags == ["OBSERVED", "RADAR", "PDS"]
     assert presentation.nws_details.tornadoDetection == "OBSERVED"
+
+
+def test_build_alert_presentation_adds_polygon_bounds() -> None:
+    presentation = build_alert_presentation(
+        _alert(
+            geometry={
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-85.7, 42.1],
+                        [-85.4, 42.1],
+                        [-85.4, 42.3],
+                        [-85.7, 42.3],
+                        [-85.7, 42.1],
+                    ]
+                ],
+            },
+        ),
+        _location(),
+        now=datetime(2099, 4, 27, 17, 0, tzinfo=UTC),
+    )
+
+    assert presentation.geometry_bounds is not None
+    assert presentation.geometry_bounds.model_dump() == {
+        "west": -85.7,
+        "south": 42.1,
+        "east": -85.4,
+        "north": 42.3,
+    }
+
+
+def test_build_alert_presentation_adds_multipolygon_bounds() -> None:
+    presentation = build_alert_presentation(
+        _alert(
+            geometry={
+                "type": "MultiPolygon",
+                "coordinates": [
+                    [
+                        [
+                            [-85.7, 42.1],
+                            [-85.6, 42.1],
+                            [-85.6, 42.2],
+                            [-85.7, 42.1],
+                        ]
+                    ],
+                    [
+                        [
+                            [-85.3, 42.4],
+                            [-85.1, 42.4],
+                            [-85.1, 42.6],
+                            [-85.3, 42.4],
+                        ]
+                    ],
+                ],
+            },
+        ),
+        _location(),
+        now=datetime(2099, 4, 27, 17, 0, tzinfo=UTC),
+    )
+
+    assert presentation.geometry_bounds is not None
+    assert presentation.geometry_bounds.model_dump() == {
+        "west": -85.7,
+        "south": 42.1,
+        "east": -85.1,
+        "north": 42.6,
+    }
+
+
+def test_build_alert_presentation_uses_null_bounds_for_missing_geometry() -> None:
+    presentation = build_alert_presentation(
+        _alert(geometry=None),
+        _location(),
+        now=datetime(2099, 4, 27, 17, 0, tzinfo=UTC),
+    )
+
+    assert presentation.geometry_bounds is None
+
+
+def test_build_alert_presentation_uses_null_bounds_for_malformed_geometry() -> None:
+    presentation = build_alert_presentation(
+        _alert(geometry={"type": "Polygon", "coordinates": [[["bad", 42.1]]]}),
+        _location(),
+        now=datetime(2099, 4, 27, 17, 0, tzinfo=UTC),
+    )
+
+    assert presentation.geometry_bounds is None
 
 
 def test_build_alert_presentation_detects_tags_from_raw_properties() -> None:

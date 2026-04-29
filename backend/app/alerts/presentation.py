@@ -1,3 +1,4 @@
+import math
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -46,9 +47,59 @@ def build_alert_presentation(
             "expires_in": build_expires_in(alert.expires, current_time),
             "severity_color": build_severity_color(alert.severity),
             "tags": build_tags(alert),
+            "geometry_bounds": build_geometry_bounds(alert.geometry),
         }
     )
     return AlertPresentation.model_validate(alert_data)
+
+
+def build_geometry_bounds(geometry: dict[str, Any] | None) -> dict[str, float] | None:
+    if not isinstance(geometry, dict):
+        return None
+
+    geometry_type = geometry.get("type")
+    coordinates = geometry.get("coordinates")
+    if geometry_type not in {"Polygon", "MultiPolygon"} or not isinstance(coordinates, list):
+        return None
+
+    positions: list[tuple[float, float]] = []
+    _collect_positions(coordinates, positions)
+    if not positions:
+        return None
+
+    longitudes = [position[0] for position in positions]
+    latitudes = [position[1] for position in positions]
+    return {
+        "west": min(longitudes),
+        "south": min(latitudes),
+        "east": max(longitudes),
+        "north": max(latitudes),
+    }
+
+
+def _collect_positions(value: Any, positions: list[tuple[float, float]]) -> None:
+    if not isinstance(value, list):
+        return
+
+    if _is_position(value):
+        longitude = float(value[0])
+        latitude = float(value[1])
+        if -180 <= longitude <= 180 and -90 <= latitude <= 90:
+            positions.append((longitude, latitude))
+        return
+
+    for item in value:
+        _collect_positions(item, positions)
+
+
+def _is_position(value: list[Any]) -> bool:
+    if len(value) < 2:
+        return False
+    return _is_finite_number(value[0]) and _is_finite_number(value[1])
+
+
+def _is_finite_number(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def build_title(alert: WeatherAlert) -> str:
