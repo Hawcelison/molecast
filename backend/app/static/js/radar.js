@@ -4,7 +4,8 @@
   const MAX_MAP_INIT_RETRIES = 100;
   const MAP_INIT_RETRY_DELAY_MS = 100;
   const DEFAULT_RADAR_MIN_ZOOM = 0;
-  const DEFAULT_RADAR_MAX_ZOOM = 10;
+  const DEFAULT_RADAR_MAX_ZOOM = 7;
+  const DEFAULT_AUTO_ANIMATE = false;
 
   const state = {
     frames: [],
@@ -45,6 +46,10 @@
 
   function getRadarMaxZoom(config) {
     return Number.isFinite(config.maxZoom) ? config.maxZoom : DEFAULT_RADAR_MAX_ZOOM;
+  }
+
+  function shouldAutoAnimate(config) {
+    return typeof config.autoAnimate === "boolean" ? config.autoAnimate : DEFAULT_AUTO_ANIMATE;
   }
 
   function buildTileUrl(host, path) {
@@ -116,7 +121,14 @@
 
   function addFramesToMap(map, metadata) {
     const config = getConfig();
-    const frames = getRadarFrames(metadata);
+    const frames = getRadarFrames(metadata).filter(function (frame) {
+      return frame && typeof frame.path === "string" && frame.path;
+    });
+
+    if (!metadata || typeof metadata.host !== "string" || !metadata.host || frames.length === 0) {
+      console.warn("Molecast radar: RainViewer metadata did not include usable frames.");
+      return;
+    }
 
     state.frames = frames;
 
@@ -157,7 +169,9 @@
 
     if (frames.length > 0) {
       showFrame(frames.length - 1);
-      startAnimation();
+      if (shouldAutoAnimate(config)) {
+        startAnimation();
+      }
     }
   }
 
@@ -174,12 +188,14 @@
     try {
       const response = await window.fetch(config.apiUrl);
       if (!response.ok) {
+        console.warn(`Molecast radar: RainViewer metadata request failed with ${response.status}.`);
         return;
       }
 
       const metadata = await response.json();
       addFramesToMap(map, metadata);
-    } catch (_error) {
+    } catch (error) {
+      console.warn("Molecast radar: unable to initialize radar layer.", error);
       state.initialized = false;
     }
   }

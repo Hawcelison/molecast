@@ -30,6 +30,7 @@
       container: config.map.containerId,
       style: "mapbox://styles/mapbox/dark-v11",
       center: [center.longitude, center.latitude],
+      projection: "mercator",
       zoom: config.map.zoom,
     });
   }
