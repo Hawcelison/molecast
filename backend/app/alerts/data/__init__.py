@@ -1,0 +1,2 @@
+"""Bundled alert catalog data."""
+

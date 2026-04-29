@@ -1,0 +1,225 @@
+{
+  "schema_version": 1,
+  "hazards": [
+    {
+      "event": "Tornado Warning",
+      "priority": 1000,
+      "color_hex": "#FF0000",
+      "color_name": "Red",
+      "icon": "tornado",
+      "default_sound": "tornado",
+      "flash": true,
+      "aria_live": "assertive"
+    },
+    {
+      "event": "Tornado Watch",
+      "priority": 700,
+      "color_hex": "#FFFF00",
+      "color_name": "Yellow",
+      "icon": "cloud-lightning",
+      "default_sound": "default",
+      "flash": false,
+      "aria_live": "polite"
+    },
+    {
+      "event": "Severe Thunderstorm Warning",
+      "priority": 850,
+      "color_hex": "#FFA500",
+      "color_name": "Orange",
+      "icon": "cloud-lightning",
+      "default_sound": "default",
+      "flash": true,
+      "aria_live": "assertive"
+    },
+    {
+      "event": "Severe Thunderstorm Watch",
+      "priority": 650,
+      "color_hex": "#DB7093",
+      "color_name": "Pale Violet Red",
+      "icon": "cloud-lightning",
+      "default_sound": "default",
+      "flash": false,
+      "aria_live": "polite"
+    },
+    {
+      "event": "Flash Flood Warning",
+      "priority": 825,
+      "color_hex": "#00FF00",
+      "color_name": "Lime",
+      "icon": "waves",
+      "default_sound": "default",
+      "flash": true,
+      "aria_live": "assertive"
+    },
+    {
+      "event": "Flood Warning",
+      "priority": 625,
+      "color_hex": "#00FF00",
+      "color_name": "Lime",
+      "icon": "waves",
+      "default_sound": "default",
+      "flash": false,
+      "aria_live": "polite"
+    },
+    {
+      "event": "Blizzard Warning",
+      "priority": 800,
+      "color_hex": "#00FFFF",
+      "color_name": "Cyan",
+      "icon": "snowflake",
+      "default_sound": "default",
+      "flash": true,
+      "aria_live": "assertive"
+    },
+    {
+      "event": "Winter Storm Warning",
+      "priority": 620,
+      "color_hex": "#FF69B4",
+      "color_name": "Hot Pink",
+      "icon": "snowflake",
+      "default_sound": "default",
+      "flash": false,
+      "aria_live": "polite"
+    },
+    {
+      "event": "Ice Storm Warning",
+      "priority": 760,
+      "color_hex": "#FF00FF",
+      "color_name": "Magenta",
+      "icon": "snowflake",
+      "default_sound": "default",
+      "flash": true,
+      "aria_live": "assertive"
+    },
+    {
+      "event": "High Wind Warning",
+      "priority": 720,
+      "color_hex": "#DAA520",
+      "color_name": "Goldenrod",
+      "icon": "wind",
+      "default_sound": "default",
+      "flash": false,
+      "aria_live": "assertive"
+    },
+    {
+      "event": "Heat Advisory",
+      "priority": 360,
+      "color_hex": "#FF7F50",
+      "color_name": "Coral",
+      "icon": "thermometer-sun",
+      "default_sound": "none",
+      "flash": false,
+      "aria_live": "polite"
+    },
+    {
+      "event": "Excessive Heat Warning",
+      "priority": 640,
+      "color_hex": "#FF0000",
+      "color_name": "Red",
+      "icon": "thermometer-sun",
+      "default_sound": "default",
+      "flash": false,
+      "aria_live": "polite"
+    },
+    {
+      "event": "Dense Fog Advisory",
+      "priority": 250,
+      "color_hex": "#708090",
+      "color_name": "Slate Gray",
+      "icon": "cloud-fog",
+      "default_sound": "none",
+      "flash": false,
+      "aria_live": "polite"
+    },
+    {
+      "event": "Special Weather Statement",
+      "priority": 150,
+      "color_hex": "#FFE4B5",
+      "color_name": "Moccasin",
+      "icon": "info",
+      "default_sound": "none",
+      "flash": false,
+      "aria_live": "polite"
+    },
+    {
+      "event": "Snow Squall Warning",
+      "priority": 780,
+      "color_hex": "#C71585",
+      "color_name": "Medium Violet Red",
+      "icon": "snowflake",
+      "default_sound": "default",
+      "flash": true,
+      "aria_live": "assertive"
+    },
+    {
+      "event": "Extreme Wind Warning",
+      "priority": 900,
+      "color_hex": "#FF8C00",
+      "color_name": "Dark Orange",
+      "icon": "wind",
+      "default_sound": "default",
+      "flash": true,
+      "aria_live": "assertive"
+    },
+    {
+      "event": "Hurricane Warning",
+      "priority": 875,
+      "color_hex": "#DC143C",
+      "color_name": "Crimson",
+      "icon": "hurricane",
+      "default_sound": "default",
+      "flash": true,
+      "aria_live": "assertive"
+    },
+    {
+      "event": "Tropical Storm Warning",
+      "priority": 720,
+      "color_hex": "#B22222",
+      "color_name": "Firebrick",
+      "icon": "hurricane",
+      "default_sound": "default",
+      "flash": false,
+      "aria_live": "assertive"
+    },
+    {
+      "event": "Storm Surge Warning",
+      "priority": 860,
+      "color_hex": "#B524F7",
+      "color_name": "Purple",
+      "icon": "waves",
+      "default_sound": "default",
+      "flash": true,
+      "aria_live": "assertive"
+    },
+    {
+      "event": "Red Flag Warning",
+      "priority": 620,
+      "color_hex": "#FF1493",
+      "color_name": "Deep Pink",
+      "icon": "flame",
+      "default_sound": "default",
+      "flash": false,
+      "aria_live": "polite"
+    },
+    {
+      "event": "Fire Weather Watch",
+      "priority": 420,
+      "color_hex": "#FFDEAD",
+      "color_name": "Navajo White",
+      "icon": "flame",
+      "default_sound": "none",
+      "flash": false,
+      "aria_live": "polite"
+    },
+    {
+      "event": "Winter Weather Advisory",
+      "priority": 340,
+      "color_hex": "#7B68EE",
+      "color_name": "Medium Slate Blue",
+      "icon": "snowflake",
+      "default_sound": "none",
+      "flash": false,
+      "aria_live": "polite"
+    }
+  ]
+}

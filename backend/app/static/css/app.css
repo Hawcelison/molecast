@@ -25,6 +25,41 @@ table {
   width: 100%;
 }
 
+.alert-controls {
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.55rem 1rem;
+  width: 100%;
+}
+
+.alert-control-toggle {
+  align-items: center;
+  display: inline-flex;
+  font-size: 0.86rem;
+  font-weight: 750;
+  gap: 0.35rem;
+  line-height: 1.2;
+}
+
+.alert-control-button {
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 750;
+  padding: 0.35rem 0.55rem;
+}
+
+.alert-control-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .alert-banner {
   --alert-accent: #2563eb;
   --alert-fg: #ffffff;
@@ -50,8 +85,20 @@ table {
 .alert-banner__compact {
   align-items: center;
   display: flex;
+  gap: 0.65rem;
   min-height: 2.75rem;
   padding: 0.7rem 1rem;
+}
+
+.alert-banner__icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1.2rem;
+  font-weight: 900;
+  justify-content: center;
+  line-height: 1;
+  min-width: 1.5rem;
 }
 
 .alert-banner__details {
@@ -77,6 +124,13 @@ table {
   letter-spacing: 0;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alert-banner,
+  .alert-banner * {
+    scroll-behavior: auto;
+  }
 }
 
 .alert-banner__detail-row {

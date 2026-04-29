@@ -26,8 +26,8 @@
       "description": "TEST tornado warning centered near 4222 Fireside Ave, Portage, MI 49002.",
       "instruction": "TAKE COVER NOW. Move to a basement or interior room on the lowest floor.",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-28T17:59:33Z",
-      "expires": "2026-04-28T20:59:33Z",
+      "effective": "2026-04-29T13:32:36Z",
+      "expires": "2026-04-29T16:32:36Z",
       "geometry": {
         "type": "Polygon",
         "coordinates": [
@@ -37,8 +37,8 @@
               42.280644
             ],
             [
-              -85.522666,
-              42.250637
+              -85.462764,
+              42.297602
             ],
             [
               -85.492302,
@@ -79,17 +79,19 @@
     {
       "enabled": false,
       "id": "test-tornado-warning-49002",
+      "source": "test",
       "event": "Tornado Warning",
       "severity": "Extreme",
       "urgency": "Immediate",
       "certainty": "Observed",
       "headline": "Test Tornado Warning for Portage",
       "description": "This is a disabled local test alert for Tornado Warning behavior.",
+      "instruction": "",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-28T12:58:27Z",
-      "expires": "2026-04-28T15:58:27Z",
+      "effective": "2026-04-28T23:53:18Z",
+      "expires": "2026-04-29T02:53:18Z",
       "geometry": null,
-      "source": "test"
+      "parameters": {}
     },
     {
       "enabled": true,
@@ -103,19 +105,19 @@
       "description": "This is a disabled local test alert for Tornado Watch behavior.",
       "instruction": "",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-28T17:59:38Z",
-      "expires": "2026-04-28T20:59:38Z",
+      "effective": "2026-04-29T03:35:08Z",
+      "expires": "2026-04-29T06:35:08Z",
       "geometry": {
         "type": "Polygon",
         "coordinates": [
           [
             [
-              -85.573192,
-              42.231228
+              -85.619923,
+              42.220271
             ],
             [
-              -85.573192,
-              42.231228
+              -85.555022,
+              42.229485
             ],
             [
               -85.552149,
@@ -130,8 +132,8 @@
               42.191347
             ],
             [
-              -85.573192,
-              42.231228
+              -85.619923,
+              42.220271
             ]
           ]
         ]
@@ -139,7 +141,7 @@
       "parameters": {}
     },
     {
-      "enabled": false,
+      "enabled": true,
       "id": "test-severe-thunderstorm-warning-49002",
       "source": "test",
       "event": "Severe Thunderstorm Warning",
@@ -150,13 +152,39 @@
       "description": "This is a disabled local test alert for Severe Thunderstorm Warning behavior.",
       "instruction": "",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-27T17:06:32Z",
-      "expires": "2026-04-27T20:06:32Z",
-      "geometry": null,
-      "parameters": null
+      "effective": "2026-04-29T13:33:26Z",
+      "expires": "2026-04-29T16:33:26Z",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -85.621017,
+              42.229161
+            ],
+            [
+              -85.554985,
+              42.228706
+            ],
+            [
+              -85.521308,
+              42.157722
+            ],
+            [
+              -85.638692,
+              42.157722
+            ],
+            [
+              -85.621017,
+              42.229161
+            ]
+          ]
+        ]
+      },
+      "parameters": {}
     },
     {
-      "enabled": true,
+      "enabled": false,
       "id": "test-severe-thunderstorm-watch-49002",
       "source": "test",
       "event": "Severe Thunderstorm Watch",
@@ -272,7 +300,7 @@
       "parameters": {}
     },
     {
-      "enabled": true,
+      "enabled": false,
       "id": "test-blizzard-warning-49002",
       "source": "test",
       "event": "Blizzard Warning",
@@ -283,10 +311,36 @@
       "description": "This is a disabled local test alert for Blizzard Warning behavior.",
       "instruction": "",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-28T17:59:44Z",
-      "expires": "2026-04-28T20:59:44Z",
-      "geometry": null,
-      "parameters": null
+      "effective": "2026-04-28T23:28:02Z",
+      "expires": "2026-04-29T02:28:02Z",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -85.638692,
+              42.244678
+            ],
+            [
+              -85.521308,
+              42.244678
+            ],
+            [
+              -85.521308,
+              42.157722
+            ],
+            [
+              -85.638692,
+              42.157722
+            ],
+            [
+              -85.638692,
+              42.244678
+            ]
+          ]
+        ]
+      },
+      "parameters": {}
     },
     {
       "enabled": false,
@@ -353,19 +407,47 @@
       "source": "test"
     },
     {
-      "enabled": false,
+      "enabled": true,
       "id": "test-dense-fog-advisory-49002",
+      "source": "test",
       "event": "Dense Fog Advisory",
       "severity": "Moderate",
       "urgency": "Expected",
       "certainty": "Likely",
       "headline": "Test Dense Fog Advisory for Portage",
       "description": "This is a disabled local test alert for Dense Fog Advisory behavior.",
+      "instruction": "",
       "areaDesc": "Kalamazoo",
-      "effective": "2026-04-28T01:28:28Z",
-      "expires": "2026-04-28T04:28:28Z",
-      "geometry": null,
-      "source": "test"
+      "effective": "2026-04-29T03:57:42Z",
+      "expires": "2026-04-29T06:57:42Z",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -85.638692,
+              42.244678
+            ],
+            [
+              -85.521308,
+              42.244678
+            ],
+            [
+              -85.521308,
+              42.157722
+            ],
+            [
+              -85.638692,
+              42.157722
+            ],
+            [
+              -85.638692,
+              42.244678
+            ]
+          ]
+        ]
+      },
+      "parameters": {}
     },
     {
       "enabled": false,

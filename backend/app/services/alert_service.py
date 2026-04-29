@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
@@ -20,30 +20,191 @@ class AlertFetchError(RuntimeError):
     pass
 
 
+class AlertZoneFetchError(RuntimeError):
+    pass
+
+
 class NwsAlertProvider:
     def __init__(self, app_settings: Settings) -> None:
         self.settings = app_settings
+        self._cached_points_location_key: str | None = None
+        self._cached_points_metadata: dict[str, Any] | None = None
 
     def fetch_active_alerts(self, location: Location) -> dict[str, Any]:
+        payloads: list[dict[str, Any]] = []
+        point_error: AlertFetchError | None = None
+
+        try:
+            payloads.append(self._fetch_point_alerts(location))
+        except AlertFetchError as exc:
+            point_error = exc
+
+        for zone_id in self._get_alert_zone_ids(location):
+            try:
+                payloads.append(self._fetch_zone_alerts(zone_id))
+            except AlertZoneFetchError:
+                get_logger().warning(
+                    "Unable to fetch active NWS zone alerts; continuing with other alert feeds. "
+                    "zone_id=%s",
+                    zone_id,
+                    exc_info=True,
+                )
+
+        if not payloads:
+            raise point_error or AlertFetchError("Unable to fetch active NWS alerts.")
+
+        return {"type": "FeatureCollection", "features": self._dedupe_features(payloads)}
+
+    def get_points_metadata(self, location: Location) -> dict[str, Any] | None:
+        location_key = self._get_location_key(location)
+        if self._cached_points_location_key == location_key:
+            return self._cached_points_metadata
+
+        try:
+            payload = self._fetch_points_payload(location)
+        except AlertFetchError:
+            get_logger().warning(
+                "Unable to fetch NWS point metadata; continuing without zone alert feeds. "
+                "location=%s,%s",
+                location.latitude,
+                location.longitude,
+                exc_info=True,
+            )
+            return None
+
+        metadata = extract_points_metadata(payload)
+        self._cached_points_location_key = location_key
+        self._cached_points_metadata = metadata
+        return metadata
+
+    def _fetch_point_alerts(self, location: Location) -> dict[str, Any]:
         query_string = urlencode(
             {
                 "point": f"{location.latitude},{location.longitude}",
             }
         )
         url = f"{self.settings.nws_active_alerts_url}?{query_string}"
+        try:
+            return self._fetch_json(url, accept="application/geo+json")
+        except AlertFetchError as exc:
+            raise AlertFetchError("Unable to fetch active NWS alerts.") from exc
+
+    def _fetch_zone_alerts(self, zone_id: str) -> dict[str, Any]:
+        url = f"{self._nws_api_base_url()}/alerts/active/zone/{zone_id}"
+        try:
+            return self._fetch_json(url, accept="application/geo+json")
+        except AlertFetchError as exc:
+            raise AlertZoneFetchError(f"Unable to fetch active NWS alerts for zone {zone_id}.") from exc
+
+    def _fetch_points_payload(self, location: Location) -> dict[str, Any]:
+        url = f"{self._nws_api_base_url()}/points/{location.latitude},{location.longitude}"
+        return self._fetch_json(url, accept="application/geo+json")
+
+    def _fetch_json(self, url: str, accept: str) -> dict[str, Any]:
         request = Request(
             url,
             headers={
-                "Accept": "application/geo+json",
+                "Accept": accept,
                 "User-Agent": self.settings.nws_user_agent,
             },
         )
-
         try:
             with urlopen(request, timeout=10) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except OSError as exc:
-            raise AlertFetchError("Unable to fetch active NWS alerts.") from exc
+                payload = json.loads(response.read().decode("utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise AlertFetchError(f"Unable to fetch NWS JSON: {url}") from exc
+        if not isinstance(payload, dict):
+            raise AlertFetchError(f"NWS JSON response was not an object: {url}")
+        return payload
+
+    def _get_alert_zone_ids(self, location: Location) -> list[str]:
+        metadata = self.get_points_metadata(location)
+        if not metadata:
+            return []
+
+        zone_ids: list[str] = []
+        for key in ("county", "forecastZone", "fireWeatherZone"):
+            zone_id = extract_zone_id(metadata.get(key))
+            if zone_id and zone_id not in zone_ids:
+                zone_ids.append(zone_id)
+        return zone_ids
+
+    def _dedupe_features(self, payloads: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        features: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for payload in payloads:
+            raw_features = payload.get("features", [])
+            if not isinstance(raw_features, list):
+                continue
+            for feature in raw_features:
+                if not isinstance(feature, dict):
+                    continue
+                stable_id = stable_alert_feature_id(feature)
+                if stable_id in seen_ids:
+                    continue
+                seen_ids.add(stable_id)
+                features.append(feature)
+        return features
+
+    def _nws_api_base_url(self) -> str:
+        parsed = urlparse(self.settings.nws_active_alerts_url)
+        return f"{parsed.scheme}://{parsed.netloc}"
+
+    def _get_location_key(self, location: Location) -> str:
+        return f"{location.id}:{location.latitude}:{location.longitude}"
+
+
+POINT_METADATA_FIELDS = (
+    "forecastOffice",
+    "gridId",
+    "gridX",
+    "gridY",
+    "forecast",
+    "forecastHourly",
+    "forecastGridData",
+    "observationStations",
+    "county",
+    "forecastZone",
+    "fireWeatherZone",
+    "timeZone",
+    "radarStation",
+)
+
+
+def extract_points_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+    properties = payload.get("properties", {})
+    if not isinstance(properties, dict):
+        return {}
+    return {field: properties.get(field) for field in POINT_METADATA_FIELDS if field in properties}
+
+
+def extract_zone_id(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    parsed = urlparse(value.strip())
+    path = parsed.path if parsed.scheme else value.strip()
+    zone_id = path.rstrip("/").split("/")[-1].strip()
+    return zone_id or None
+
+
+def stable_alert_feature_id(feature: dict[str, Any]) -> str:
+    properties = feature.get("properties", {})
+    if not isinstance(properties, dict):
+        properties = {}
+    for value in (
+        properties.get("canonical_id"),
+        properties.get("canonicalId"),
+        properties.get("id"),
+        properties.get("@id"),
+        properties.get("identifier"),
+        feature.get("canonical_id"),
+        feature.get("canonicalId"),
+        feature.get("id"),
+        feature.get("@id"),
+    ):
+        if value:
+            return str(value)
+    return json.dumps(feature, sort_keys=True, default=str)
 
 
 class ActiveAlertService:

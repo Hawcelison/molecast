@@ -6,8 +6,18 @@
 </script>
 {% endblock %}
 
+{% block page_scripts %}
+<script src="/static/js/modules/settings-store.js" defer></script>
+<script src="/static/js/modules/alerts-api.js" defer></script>
+<script src="/static/js/modules/alert-icons.js" defer></script>
+<script src="/static/js/modules/alert-flash.js" defer></script>
+<script src="/static/js/modules/alert-audio.js" defer></script>
+<script src="/static/js/modules/alert-banners.js" defer></script>
+{% endblock %}
+
 {% block content %}
 <main id="dashboard">
+  <div id="alert-controls" class="alert-controls" aria-label="Alert controls"></div>
   <div id="alert-banner-container" class="alert-banner-container" role="list" aria-live="polite"></div>
   <h1>Molecast</h1>
   <section id="current-conditions"></section>

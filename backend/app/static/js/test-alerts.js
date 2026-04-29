@@ -334,6 +334,83 @@
     return selectedIndex >= 0 && currentAlerts()[selectedIndex] ? currentAlerts()[selectedIndex].id : null;
   }
 
+  function currentFormAlertId() {
+    return byId("field-id")?.value.trim() || null;
+  }
+
+  function captureScrollState() {
+    return {
+      left: window.scrollX || 0,
+      top: window.scrollY || 0,
+    };
+  }
+
+  function restoreScrollState(scrollState) {
+    if (!scrollState) {
+      return;
+    }
+    window.requestAnimationFrame(function () {
+      window.scrollTo(scrollState.left, scrollState.top);
+    });
+  }
+
+  function findAlertIndexById(id) {
+    if (!id) {
+      return -1;
+    }
+    return currentAlerts().findIndex(function (alert) {
+      return alert && alert.id === id;
+    });
+  }
+
+  function nearestAlertIndex(index) {
+    const alerts = currentAlerts();
+    if (!alerts.length) {
+      return -1;
+    }
+    const numericIndex = Number.isFinite(index) ? index : 0;
+    return Math.min(Math.max(numericIndex, 0), alerts.length - 1);
+  }
+
+  function clearSelectedAlertForm() {
+    selectedIndex = -1;
+    byId("field-enabled").checked = false;
+    fillSelect("field-event", eventValues, "");
+    ["id", "source", "severity", "urgency", "certainty", "headline", "description", "instruction", "areaDesc", "effective", "expires"].forEach(function (field) {
+      byId(`field-${field}`).value = "";
+    });
+    byId("field-geometry").value = "";
+    byId("field-parameters").value = "{}";
+    renderParameterFields({});
+    geometryDrawPoints = [];
+    geometryEditEnabled = false;
+    updateLocalTimes();
+    renderSelectedGeometryOnMap(null, false);
+  }
+
+  function restoreSelectedAlert(selectionState) {
+    const state = selectionState || {};
+    const preferredIds = [state.preferredId, state.previousId].filter(Boolean);
+    let nextIndex = -1;
+
+    preferredIds.some(function (id) {
+      nextIndex = findAlertIndexById(id);
+      return nextIndex >= 0;
+    });
+
+    if (nextIndex < 0) {
+      nextIndex = nearestAlertIndex(state.fallbackIndex);
+    }
+
+    if (nextIndex >= 0) {
+      // Save/reload must hydrate the form from the reloaded payload item, not from index 0 or stale form state.
+      selectAlert(nextIndex);
+    } else {
+      clearSelectedAlertForm();
+      renderTable();
+    }
+  }
+
   function sortedAlertEntries() {
     const entries = currentAlerts().map(function (alert, index) {
       return { alert, index };
@@ -1116,6 +1193,12 @@
     }
 
     selectedIndex = index;
+    renderSelectedAlertForm(alert);
+    renderTable();
+    renderSelectedGeometryOnMap(alert.geometry);
+  }
+
+  function renderSelectedAlertForm(alert) {
     alert.source = alert.source || "test";
     byId("field-enabled").checked = alert.enabled === true;
     fillSelect("field-event", eventValues, alert.event || "");
@@ -1133,8 +1216,6 @@
     byId("draw-polygon").classList.remove("is-active");
     byId("edit-polygon").classList.remove("is-active");
     updateLocalTimes();
-    renderTable();
-    renderSelectedGeometryOnMap(alert.geometry);
   }
 
   function readFormAlert() {
@@ -1226,7 +1307,13 @@
     return data;
   }
 
-  async function loadAlerts() {
+  async function loadAlerts(options) {
+    const scrollState = options && options.preserveScroll ? captureScrollState() : null;
+    const selectionState = {
+      preferredId: options && options.keepSelectedId,
+      previousId: options && options.previousSelectedId,
+      fallbackIndex: options && Number.isFinite(options.fallbackIndex) ? options.fallbackIndex : selectedIndex,
+    };
     setStatus("Loading");
     const data = await fetchJson(API_URL);
     payload = data.payload;
@@ -1238,25 +1325,28 @@
       }
     });
     initializeGeometryMap();
-    selectedIndex = payload.alerts.length ? 0 : -1;
-    renderTable();
-    if (selectedIndex >= 0) {
-      selectAlert(selectedIndex);
-    }
+    restoreSelectedAlert(selectionState);
     await updateStatusPanel();
     setStatus(`Loaded ${new Date(data.loaded_at).toLocaleTimeString()}`);
+    restoreScrollState(scrollState);
   }
 
   async function saveAll(options) {
     const applyForm = !options || options.applyForm !== false;
-    const keepSelectedId = options && options.keepSelectedId;
     if (!payload) {
       return null;
     }
+    const formSelectedId = currentFormAlertId();
+    const previousSelectedId = selectedAlertId();
+    const previousSelectedIndex = selectedIndex;
+    const scrollState = captureScrollState();
     setEditorMessage("", "success");
+    let savedAlert = null;
     if (applyForm && selectedIndex >= 0) {
-      applyFormToPayload();
+      savedAlert = applyFormToPayload();
     }
+    const keepSelectedId = options && options.keepSelectedId ? options.keepSelectedId : savedAlert?.id || formSelectedId || previousSelectedId;
+    const fallbackIndex = options && Number.isFinite(options.fallbackIndex) ? options.fallbackIndex : previousSelectedIndex;
     validatePayloadBeforeSave();
     setStatus("Saving");
     const data = await fetchJson(API_URL, {
@@ -1266,17 +1356,13 @@
     });
     setStatus(`Saved ${new Date(data.saved_at).toLocaleTimeString()} - active test alerts ${data.refresh.active_test_alert_count}`);
     setEditorMessage("Saved successfully", "success");
-    await loadAlerts();
-    if (keepSelectedId) {
-      const nextIndex = currentAlerts().findIndex(function (alert) {
-        return alert.id === keepSelectedId;
-      });
-      if (nextIndex >= 0) {
-        selectAlert(nextIndex);
-      }
-    } else if (selectedIndex >= 0) {
-      selectAlert(selectedIndex);
-    }
+    await loadAlerts({
+      keepSelectedId,
+      previousSelectedId: formSelectedId || previousSelectedId,
+      fallbackIndex,
+      preserveScroll: false,
+    });
+    restoreScrollState(scrollState);
     return data;
   }
 
@@ -1322,7 +1408,7 @@
     }
     payload.alerts.splice(index, 1);
     selectedIndex = Math.min(index, payload.alerts.length - 1);
-    await saveAll({ applyForm: false });
+    await saveAll({ applyForm: false, fallbackIndex: index });
   }
 
   async function disableSelected() {
@@ -1395,7 +1481,13 @@
     fillSelect("field-urgency", urgencyValues);
     fillSelect("field-certainty", certaintyValues);
     fillSelect("field-event", eventValues);
-    byId("reload-alerts").addEventListener("click", function () { loadAlerts().catch(showError); });
+    byId("reload-alerts").addEventListener("click", function () {
+      loadAlerts({
+        keepSelectedId: selectedAlertId(),
+        fallbackIndex: selectedIndex,
+        preserveScroll: true,
+      }).catch(showError);
+    });
     document.querySelectorAll("[data-sort-key]").forEach(function (button) {
       button.addEventListener("click", function () {
         const key = button.dataset.sortKey;
