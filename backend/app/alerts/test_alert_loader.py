@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +113,7 @@ class TestAlertLoader:
             return None
 
         area_desc = raw_alert.get("areaDesc") or location.county or location.state
+        effective, expires = resolve_relative_time_fields(raw_alert, now_utc())
         properties = {
             "id": alert_id,
             "source": raw_alert.get("source") or "test",
@@ -123,8 +125,8 @@ class TestAlertLoader:
             "description": raw_alert.get("description"),
             "instruction": raw_alert.get("instruction"),
             "areaDesc": area_desc,
-            "effective": raw_alert.get("effective"),
-            "expires": raw_alert.get("expires"),
+            "effective": effective,
+            "expires": expires,
             "parameters": raw_alert.get("parameters"),
         }
         effective_at = parse_alert_time_utc(properties["effective"])
@@ -149,3 +151,34 @@ class TestAlertLoader:
             "properties": properties,
             "geometry": raw_alert.get("geometry"),
         }
+
+
+def resolve_relative_time_fields(
+    raw_alert: dict[str, Any],
+    base_time: datetime,
+) -> tuple[Any, Any]:
+    relative_time = raw_alert.get("relative_time")
+    if not isinstance(relative_time, dict):
+        return raw_alert.get("effective"), raw_alert.get("expires")
+
+    effective_offset = _relative_minutes(relative_time.get("effective_minutes_from_now"))
+    expires_offset = _relative_minutes(relative_time.get("expires_minutes_from_now"))
+    if effective_offset is None or expires_offset is None:
+        return raw_alert.get("effective"), raw_alert.get("expires")
+
+    effective = base_time + timedelta(minutes=effective_offset)
+    expires = base_time + timedelta(minutes=expires_offset)
+    return _format_utc(effective), _format_utc(expires)
+
+
+def _relative_minutes(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
+
+
+def _format_utc(value: datetime) -> str:
+    utc_value = parse_alert_time_utc(value)
+    if utc_value is None:
+        return value.isoformat()
+    return utc_value.replace(microsecond=0).isoformat().replace("+00:00", "Z")

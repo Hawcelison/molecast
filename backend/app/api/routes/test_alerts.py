@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app import constants
+from app.alerts.test_alert_loader import resolve_relative_time_fields
 from app.config import settings
 from app.dependencies import get_db
 from app.logging_config import get_logger
@@ -70,6 +71,24 @@ def _validate_polygon_geometry(alert_id: str, geometry: dict[str, Any] | None) -
         raise _validation_error(f"Alert {alert_id} invalid geometry: polygon needs at least 3 points.")
 
 
+def _validate_relative_time(alert_id: str, relative_time: Any) -> bool:
+    if relative_time is None:
+        return False
+    if not isinstance(relative_time, dict):
+        raise _validation_error(f"Alert {alert_id} relative_time must be a JSON object.")
+
+    for field_name in ("effective_minutes_from_now", "expires_minutes_from_now"):
+        value = relative_time.get(field_name)
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise _validation_error(f"Alert {alert_id} relative_time.{field_name} must be a number.")
+
+    if relative_time["expires_minutes_from_now"] <= relative_time["effective_minutes_from_now"]:
+        raise _validation_error(
+            f"Alert {alert_id} relative_time.expires_minutes_from_now must be after effective_minutes_from_now."
+        )
+    return True
+
+
 def _resolve_test_alert_file() -> Path:
     configured_path = Path(constants.TEST_ALERTS_FILE)
     candidates = [
@@ -123,21 +142,23 @@ def _validate_test_alert_payload(payload: Any) -> dict[str, Any]:
         elif not isinstance(enabled, bool):
             raise _validation_error(f"Alert {alert_id} enabled must be true or false.")
 
-        parsed_times: dict[str, datetime] = {}
-        for field_name in ("effective", "expires"):
-            value = alert.get(field_name)
-            if value in (None, ""):
-                raise _validation_error(f"Alert {alert_id} {field_name} is required.")
-            parsed_value = _parse_utc(value)
-            if parsed_value is None:
-                raise _validation_error(
-                    f"Alert {alert_id} {field_name} must be an ISO UTC timestamp ending in Z."
-                )
-            parsed_times[field_name] = parsed_value
-        if parsed_times["expires"] <= parsed_times["effective"] and not (
-            enabled is False and parsed_times["expires"] <= now_utc()
-        ):
-            raise _validation_error(f"Alert {alert_id} expires must be after effective.")
+        has_relative_time = _validate_relative_time(alert_id, alert.get("relative_time"))
+        if not has_relative_time:
+            parsed_times: dict[str, datetime] = {}
+            for field_name in ("effective", "expires"):
+                value = alert.get(field_name)
+                if value in (None, ""):
+                    raise _validation_error(f"Alert {alert_id} {field_name} is required.")
+                parsed_value = _parse_utc(value)
+                if parsed_value is None:
+                    raise _validation_error(
+                        f"Alert {alert_id} {field_name} must be an ISO UTC timestamp ending in Z."
+                    )
+                parsed_times[field_name] = parsed_value
+            if parsed_times["expires"] <= parsed_times["effective"] and not (
+                enabled is False and parsed_times["expires"] <= now_utc()
+            ):
+                raise _validation_error(f"Alert {alert_id} expires must be after effective.")
 
         _validate_choice(alert_id, "severity", alert.get("severity"), SEVERITY_VALUES)
         _validate_choice(alert_id, "urgency", alert.get("urgency"), URGENCY_VALUES)
@@ -195,8 +216,9 @@ def _count_active_test_alerts(alerts: list[Any]) -> int:
     for alert in alerts:
         if not isinstance(alert, dict) or alert.get("enabled") is not True:
             continue
-        effective_at = _parse_utc(alert.get("effective"))
-        expires_at = _parse_utc(alert.get("expires"))
+        effective, expires = resolve_relative_time_fields(alert, current_time)
+        effective_at = _parse_utc(effective)
+        expires_at = _parse_utc(expires)
         if effective_at is not None and current_time < effective_at:
             continue
         if expires_at is not None and current_time > expires_at:

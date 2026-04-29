@@ -28,6 +28,10 @@
       "areaDesc": "Kalamazoo",
       "effective": "2026-04-29T20:10:42Z",
       "expires": "2026-04-29T23:10:42Z",
+      "relative_time": {
+        "effective_minutes_from_now": -5,
+        "expires_minutes_from_now": 90
+      },
       "geometry": {
         "type": "Polygon",
         "coordinates": [
@@ -154,6 +158,10 @@
       "areaDesc": "Kalamazoo",
       "effective": "2026-04-29T18:02:43Z",
       "expires": "2026-04-29T21:02:43Z",
+      "relative_time": {
+        "effective_minutes_from_now": -5,
+        "expires_minutes_from_now": 90
+      },
       "geometry": {
         "type": "Polygon",
         "coordinates": [
