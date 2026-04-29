@@ -6,6 +6,8 @@ from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
 
+from app.alerts.models import MolecastAlert
+from app.alerts.normalize import normalize_nws_feature_collection
 from app.config import Settings, settings
 from app.logging_config import get_logger
 from app.models.location import Location
@@ -299,15 +301,16 @@ def parse_nws_alerts(
     logger = get_logger()
     current_time = now_utc()
 
-    for feature in payload.get("features", []):
-        if not isinstance(feature, dict):
-            logger.warning("Skipping malformed alert feature: source=%s feature=%r", source, feature)
-            continue
-        properties = feature.get("properties", {})
-        if not isinstance(properties, dict):
-            logger.warning("Skipping alert with malformed properties: source=%s feature=%r", source, feature)
-            continue
-        alert_id = properties.get("id") or feature.get("id")
+    try:
+        normalized_alerts = normalize_nws_feature_collection(payload, source=source)
+    except ValueError:
+        logger.warning("Skipping malformed NWS alert payload: source=%s payload=%r", source, payload)
+        return []
+
+    for normalized_alert in normalized_alerts:
+        feature = normalized_alert.raw_feature
+        properties = normalized_alert.raw_properties
+        alert_id = normalized_alert.id
         try:
             match = match_alert_to_location(feature, location)
         except Exception:
@@ -375,35 +378,12 @@ def parse_nws_alerts(
             )
             continue
 
-        priority = score_alert(
-            properties.get("severity"),
-            properties.get("urgency"),
-            properties.get("certainty"),
+        ranking = score_alert(
+            normalized_alert.severity,
+            normalized_alert.urgency,
+            normalized_alert.certainty,
         )
-        alert_data = {
-            "id": properties.get("id") or feature.get("id"),
-            "source": feature.get("source") or properties.get("source") or source,
-            "event": properties.get("event"),
-            "severity": properties.get("severity"),
-            "urgency": properties.get("urgency"),
-            "certainty": properties.get("certainty"),
-            "headline": properties.get("headline"),
-            "description": properties.get("description"),
-            "areaDesc": properties.get("areaDesc"),
-            "effective": effective_at,
-            "expires": expires_at,
-            "geometry": feature.get("geometry"),
-            "raw_properties": properties,
-            "match": {
-                "match_type": match.match_type,
-                "matched_value": match.matched_value,
-                "confidence": match.confidence,
-            },
-            "priority_score": priority.priority_score,
-            "severity_rank": priority.severity_rank,
-            "urgency_rank": priority.urgency_rank,
-            "certainty_rank": priority.certainty_rank,
-        }
+        alert_data = _weather_alert_data(normalized_alert, match, ranking)
 
         try:
             alerts.append(WeatherAlert.model_validate(alert_data))
@@ -427,6 +407,43 @@ def parse_nws_alerts(
             continue
 
     return sort_alerts_by_priority(alerts)
+
+
+def _weather_alert_data(normalized_alert: MolecastAlert, match: Any, ranking: Any) -> dict[str, Any]:
+    raw_properties = dict(normalized_alert.raw_properties)
+    if normalized_alert.color_hex is not None:
+        raw_properties["color_hex"] = normalized_alert.color_hex
+    if normalized_alert.icon is not None:
+        raw_properties["icon"] = normalized_alert.icon
+    if normalized_alert.priority is not None:
+        raw_properties["priority"] = normalized_alert.priority
+    if normalized_alert.geocode is not None:
+        raw_properties["normalized_geocode"] = normalized_alert.geocode
+
+    return {
+        "id": normalized_alert.id,
+        "source": normalized_alert.source,
+        "event": normalized_alert.event,
+        "severity": normalized_alert.severity,
+        "urgency": normalized_alert.urgency,
+        "certainty": normalized_alert.certainty,
+        "headline": normalized_alert.headline,
+        "description": normalized_alert.description,
+        "areaDesc": normalized_alert.areaDesc,
+        "effective": normalized_alert.effective,
+        "expires": normalized_alert.expires,
+        "geometry": normalized_alert.geometry,
+        "raw_properties": raw_properties,
+        "match": {
+            "match_type": match.match_type,
+            "matched_value": match.matched_value,
+            "confidence": match.confidence,
+        },
+        "priority_score": normalized_alert.priority or ranking.priority_score,
+        "severity_rank": ranking.severity_rank,
+        "urgency_rank": ranking.urgency_rank,
+        "certainty_rank": ranking.certainty_rank,
+    }
 
 
 def is_alert_expired(expires: Any, now: datetime | None = None) -> bool:

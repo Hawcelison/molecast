@@ -43,7 +43,7 @@ def test_parse_nws_alerts_keeps_utc_timestamps() -> None:
         "features": [
             _feature(
                 "valid-alert",
-                "2099-04-27T12:00:00-04:00",
+                "2026-04-27T12:00:00-04:00",
                 "2099-04-27T18:00:00Z",
             )
         ]
@@ -52,7 +52,7 @@ def test_parse_nws_alerts_keeps_utc_timestamps() -> None:
     alerts = parse_nws_alerts(payload, _location())
 
     assert len(alerts) == 1
-    assert alerts[0].effective == datetime(2099, 4, 27, 16, 0, tzinfo=UTC)
+    assert alerts[0].effective == datetime(2026, 4, 27, 16, 0, tzinfo=UTC)
     assert alerts[0].expires == datetime(2099, 4, 27, 18, 0, tzinfo=UTC)
     assert alerts[0].raw_properties["id"] == "valid-alert"
 
