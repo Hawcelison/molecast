@@ -12,8 +12,9 @@
   const state = {
     alerts: [],
     selectedAlertId: null,
-    initialized: false,
     pendingRender: false,
+    boundMap: null,
+    retryTimer: null,
     mapInitRetries: 0,
   };
 
@@ -79,20 +80,17 @@
     };
   }
 
-  function ensureInitialized() {
+  function ensureSourceAndLayers() {
     const map = getMap();
     if (!map) {
-      retryInitialize();
+      scheduleRenderRetry();
       return false;
     }
 
+    bindMapReadinessEvents(map);
+
     if (!isStyleReady(map)) {
-      if (!state.initialized) {
-        map.once("load", function () {
-          ensureInitialized();
-          flushRender();
-        });
-      }
+      scheduleRenderRetry();
       return false;
     }
 
@@ -104,18 +102,35 @@
     }
 
     addLayers(map);
-    state.initialized = true;
+    state.mapInitRetries = 0;
     reassertLayerOrder();
     return true;
   }
 
-  function retryInitialize() {
+  function bindMapReadinessEvents(map) {
+    if (state.boundMap === map) {
+      return;
+    }
+
+    state.boundMap = map;
+    ["load", "style.load", "idle"].forEach(function (eventName) {
+      map.on(eventName, function () {
+        state.mapInitRetries = 0;
+        flushRender();
+      });
+    });
+  }
+
+  function scheduleRenderRetry() {
+    if (state.retryTimer) {
+      return;
+    }
     if (state.mapInitRetries >= MAX_MAP_INIT_RETRIES) {
       return;
     }
     state.mapInitRetries += 1;
-    window.setTimeout(function () {
-      ensureInitialized();
+    state.retryTimer = window.setTimeout(function () {
+      state.retryTimer = null;
       flushRender();
     }, MAP_INIT_RETRY_DELAY_MS);
   }
@@ -175,7 +190,7 @@
   }
 
   function flushRender() {
-    if (!state.pendingRender || !ensureInitialized()) {
+    if (!state.pendingRender || !ensureSourceAndLayers()) {
       return;
     }
 
@@ -329,6 +344,11 @@
     focusAlert(detail.alert || detail.alertId);
   });
 
+  document.addEventListener("molecast:alerts-updated", function (event) {
+    const detail = event.detail || {};
+    renderAlerts(detail.alerts);
+  });
+
   window.addEventListener("molecast:radar-layers-updated", function () {
     window.setTimeout(reassertLayerOrder, 0);
   });
@@ -339,5 +359,8 @@
     clearSelection: clearSelection,
   };
 
-  document.addEventListener("DOMContentLoaded", ensureInitialized);
+  document.addEventListener("DOMContentLoaded", function () {
+    state.pendingRender = true;
+    flushRender();
+  });
 })();

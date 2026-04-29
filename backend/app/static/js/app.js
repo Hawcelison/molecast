@@ -91,12 +91,18 @@
     try {
       const result = await window.MolecastAlertsApi.fetchActiveAlerts();
       window.MolecastAlertBanners.render(bannerContainer, result.alerts);
+      document.dispatchEvent(new CustomEvent("molecast:alerts-updated", {
+        detail: { alerts: result.alerts },
+      }));
       window.MOLECAST_ALERT_MAP?.renderAlerts(result.alerts);
       if (alertList) {
         renderAlerts(alertList, result.alerts);
       }
       scheduleNextLoad(result.refreshIntervalSeconds);
     } catch (_error) {
+      document.dispatchEvent(new CustomEvent("molecast:alerts-updated", {
+        detail: { alerts: [] },
+      }));
       window.MOLECAST_ALERT_MAP?.renderAlerts([]);
       resetAlertViews(alertList, bannerContainer);
     }
