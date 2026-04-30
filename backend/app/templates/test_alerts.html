@@ -106,7 +106,8 @@
       </div>
 
       <div class="form-row">
-        <label>Event<select id="field-event" name="event"></select></label>
+        <label>Event<input id="field-event" name="event" list="alert-event-options" placeholder="Type or choose an NWS event"></label>
+        <datalist id="alert-event-options"></datalist>
         <label>NWS areaDesc / Counties<input id="field-areaDesc" name="areaDesc"><span class="field-help">NWS areaDesc may contain one or more counties, zones, or named areas. It is not guaranteed to be a single county.</span></label>
       </div>
 
@@ -134,6 +135,18 @@
       <section class="editor-subsection">
         <h3>Geometry</h3>
         <div class="form-row">
+          <label>Geometry mode<select id="geometry-alert-mode"><option value="polygon">Polygon</option><option value="zone">Zone</option><option value="none">None / banner only</option></select></label>
+          <div class="geometry-button-row" aria-label="Test alert presets">
+            <button type="button" id="preset-storm-polygon">Sample storm polygon</button>
+            <button type="button" id="preset-severe-polygon">Sample severe polygon</button>
+            <button type="button" id="preset-forecast-zone">Sample forecast zone</button>
+            <button type="button" id="preset-county-zone">Sample county zone</button>
+          </div>
+        </div>
+        <p class="field-help">NWS GeoJSON uses longitude, latitude coordinate order.</p>
+        <p class="field-help">Zone-based alerts may have no polygon; affected NWS zones are shaded instead.</p>
+        <div id="polygon-mode-panel">
+        <div class="form-row">
           <label>Shape type<select id="geometry-shape-type"><option value="rectangle">rectangle</option><option value="polygon">polygon</option></select></label>
           <label>Half-width miles<input id="geometry-half-width" type="number" min="0.1" step="0.1" value="3"></label>
         </div>
@@ -157,6 +170,14 @@
           <summary>Advanced JSON</summary>
           <label>Raw Geometry JSON<textarea id="field-geometry" class="json-field" rows="10" spellcheck="false"></textarea></label>
         </details>
+        </div>
+        <div id="zone-mode-panel" class="zone-mode-panel" hidden>
+          <label>Affected NWS zone URLs<textarea id="field-affectedZones" class="json-field" rows="4" spellcheck="false" placeholder="https://api.weather.gov/zones/forecast/MIZ072"></textarea></label>
+          <div class="form-row">
+            <label>geocode.UGC<input id="field-geocode-ugc" placeholder="MIZ072, MIC077"></label>
+            <label>geocode.SAME<input id="field-geocode-same" placeholder="026077"></label>
+          </div>
+        </div>
       </section>
 
       <section class="editor-subsection">

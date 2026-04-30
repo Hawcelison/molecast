@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.dependencies import get_db
+from app.alerts.catalog import get_hazard_catalog
 from app.services import location_service
 
 
@@ -39,9 +40,16 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/test-alerts")
-def test_alert_editor(request: Request):
+def test_alert_editor(request: Request, db: Session = Depends(get_db)):
+    active_location = location_service.get_active_location(db, settings)
     frontend_config = {
         "mapbox": settings.frontend_config.get("mapbox", {}),
+        "activeLocation": jsonable_encoder(location_service.location_to_dict(active_location, settings)),
+        "alertEvents": [
+            {"event": entry["event"]}
+            for entry in sorted(get_hazard_catalog().values(), key=lambda item: item["event"])
+            if isinstance(entry.get("event"), str)
+        ],
     }
     return templates.TemplateResponse(
         "test_alerts.html",

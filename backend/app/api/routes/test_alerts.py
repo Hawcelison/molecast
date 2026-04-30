@@ -4,6 +4,7 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -43,22 +44,19 @@ def _validate_choice(alert_id: str, field_name: str, value: Any, allowed_values:
         )
 
 
-def _validate_polygon_geometry(alert_id: str, geometry: dict[str, Any] | None) -> None:
-    if geometry is None:
-        return
-    if geometry.get("type") != "Polygon":
-        raise _validation_error(f"Alert {alert_id} geometry must be a GeoJSON Polygon.")
-    coordinates = geometry.get("coordinates")
-    if not isinstance(coordinates, list) or not coordinates:
-        raise _validation_error(f"Alert {alert_id} geometry coordinates must include at least one ring.")
-    ring = coordinates[0]
+def _validate_geometry_ring(alert_id: str, ring: Any) -> None:
     if not isinstance(ring, list) or len(ring) < 4:
-        raise _validation_error(f"Alert {alert_id} invalid geometry: polygon needs at least 3 points.")
+        raise _validation_error(f"Alert {alert_id} invalid geometry: polygon ring needs at least 4 coordinate pairs.")
     for position in ring:
         if not isinstance(position, list | tuple) or len(position) < 2:
             raise _validation_error(f"Alert {alert_id} geometry positions must be [longitude, latitude].")
         longitude, latitude = position[0], position[1]
-        if not isinstance(longitude, int | float) or not isinstance(latitude, int | float):
+        if (
+            isinstance(longitude, bool)
+            or isinstance(latitude, bool)
+            or not isinstance(longitude, int | float)
+            or not isinstance(latitude, int | float)
+        ):
             raise _validation_error(f"Alert {alert_id} geometry longitude/latitude must be numbers.")
         if longitude < -180 or longitude > 180:
             raise _validation_error(f"Alert {alert_id} invalid longitude.")
@@ -69,6 +67,73 @@ def _validate_polygon_geometry(alert_id: str, geometry: dict[str, Any] | None) -
     unique_points = {(float(position[0]), float(position[1])) for position in ring[:-1]}
     if len(unique_points) < 3:
         raise _validation_error(f"Alert {alert_id} invalid geometry: polygon needs at least 3 points.")
+
+
+def _validate_polygon_rings(alert_id: str, polygon: Any) -> None:
+    if not isinstance(polygon, list) or not polygon:
+        raise _validation_error(f"Alert {alert_id} geometry coordinates must include at least one ring.")
+    for ring in polygon:
+        _validate_geometry_ring(alert_id, ring)
+
+
+def _validate_polygon_geometry(alert_id: str, geometry: dict[str, Any] | None) -> None:
+    if geometry is None:
+        return
+    geometry_type = geometry.get("type")
+    coordinates = geometry.get("coordinates")
+    if geometry_type == "Polygon":
+        _validate_polygon_rings(alert_id, coordinates)
+        return
+    if geometry_type == "MultiPolygon":
+        if not isinstance(coordinates, list) or not coordinates:
+            raise _validation_error(f"Alert {alert_id} geometry MultiPolygon must include at least one polygon.")
+        for polygon in coordinates:
+            _validate_polygon_rings(alert_id, polygon)
+        return
+    raise _validation_error(f"Alert {alert_id} geometry must be a GeoJSON Polygon or MultiPolygon.")
+
+
+def _validate_affected_zones(alert_id: str, affected_zones: Any) -> None:
+    if affected_zones is None:
+        return
+    if not isinstance(affected_zones, list):
+        raise _validation_error(f"Alert {alert_id} affectedZones must be an array.")
+    for zone_url in affected_zones:
+        if not isinstance(zone_url, str) or not zone_url.strip():
+            raise _validation_error(f"Alert {alert_id} affectedZones values must be non-empty strings.")
+        parsed = urlparse(zone_url.strip())
+        path_parts = [part for part in parsed.path.split("/") if part]
+        valid_url = (
+            parsed.scheme in {"http", "https"}
+            and parsed.netloc == "api.weather.gov"
+            and len(path_parts) == 3
+            and path_parts[0] == "zones"
+            and path_parts[1] in {"forecast", "county", "fire"}
+            and _valid_zone_id(path_parts[2])
+        )
+        if not valid_url:
+            raise _validation_error(f"Alert {alert_id} affectedZones must contain NWS zone URLs.")
+
+
+def _validate_geocode(alert_id: str, geocode: Any) -> None:
+    if geocode is None:
+        return
+    if not isinstance(geocode, dict):
+        raise _validation_error(f"Alert {alert_id} geocode must be a JSON object or null.")
+    for field_name in ("UGC", "SAME"):
+        value = geocode.get(field_name)
+        if value is None:
+            continue
+        if not isinstance(value, list):
+            raise _validation_error(f"Alert {alert_id} geocode.{field_name} must be an array.")
+        if any(not isinstance(item, str) or not item.strip() for item in value):
+            raise _validation_error(f"Alert {alert_id} geocode.{field_name} values must be non-empty strings.")
+
+
+def _valid_zone_id(zone_id: str) -> bool:
+    if len(zone_id) != 6:
+        return False
+    return zone_id[:2].isalpha() and zone_id[2] in {"C", "Z"} and zone_id[3:].isdigit()
 
 
 def _validate_relative_time(alert_id: str, relative_time: Any) -> bool:
@@ -172,6 +237,8 @@ def _validate_test_alert_payload(payload: Any) -> dict[str, Any]:
         if geometry is not None and not isinstance(geometry, dict):
             raise _validation_error(f"Alert {alert_id} geometry must be a JSON object or null.")
         _validate_polygon_geometry(alert_id, geometry)
+        _validate_affected_zones(alert_id, alert.get("affectedZones"))
+        _validate_geocode(alert_id, alert.get("geocode"))
 
         parameters = alert.get("parameters")
         if parameters is not None and not isinstance(parameters, dict):

@@ -18,7 +18,7 @@
     "snowAmount",
     "iceAccumulation",
   ];
-  const eventValues = [
+  const fallbackEventValues = [
     "Administrative Message", "Avalanche Watch", "Avalanche Warning", "Blizzard Warning",
     "Child Abduction Emergency", "Civil Danger Warning", "Civil Emergency Message",
     "Coastal Flood Advisory", "Coastal Flood Statement", "Coastal Flood Watch",
@@ -74,9 +74,57 @@
   let geometryMapClickFallbackWired = false;
   let geometryMapLoaded = false;
   let geometryMode = "rectangle";
+  let alertGeometryMode = "polygon";
   let geometryDrawPoints = [];
   let geometryEditEnabled = false;
   let suppressGeometryFieldInput = false;
+
+  function eventCategory(eventName) {
+    const name = String(eventName || "").toLowerCase();
+    if (/tornado|thunderstorm|squall|hail/.test(name)) {
+      return "Convective";
+    }
+    if (/flood|hydrologic/.test(name)) {
+      return "Flood/Hydrologic";
+    }
+    if (/winter|snow|blizzard|ice|freeze|frost|cold|avalanche/.test(name)) {
+      return "Winter/Cold";
+    }
+    if (/heat/.test(name)) {
+      return "Heat";
+    }
+    if (/wind|dust|fog|smoke|visibility/.test(name)) {
+      return "Wind/Dust/Visibility";
+    }
+    if (/fire|red flag/.test(name)) {
+      return "Fire Weather";
+    }
+    if (/tropical|hurricane|typhoon|storm surge|coastal|marine|gale|surf|seas|spray|rip current|tsunami/.test(name)) {
+      return "Tropical/Coastal/Marine";
+    }
+    if (/civil|child abduction|evacuation|shelter|law enforcement|nuclear|radiological|hazardous materials|earthquake|volcano/.test(name)) {
+      return "Civil/Non-weather";
+    }
+    return "Statements/Other";
+  }
+
+  function catalogEventValues() {
+    const configuredEvents = (window.MOLECAST_TEST_ALERT_CONFIG && window.MOLECAST_TEST_ALERT_CONFIG.alertEvents) || [];
+    return configuredEvents.map(function (entry) {
+      if (typeof entry === "string") {
+        return entry;
+      }
+      return entry && entry.event;
+    }).filter(function (eventName) {
+      return typeof eventName === "string" && eventName.trim();
+    });
+  }
+
+  function allEventValues() {
+    return [...new Set([...catalogEventValues(), ...fallbackEventValues].map(function (eventName) {
+      return eventName.trim();
+    }).filter(Boolean))].sort();
+  }
 
   function byId(id) {
     return document.getElementById(id);
@@ -147,6 +195,13 @@
     }
   }
 
+  function splitListInput(value) {
+    return String(value || "")
+      .split(/[\n,]+/)
+      .map(function (item) { return item.trim(); })
+      .filter(Boolean);
+  }
+
   function validateUtc(value, label) {
     if (!value) {
       return value;
@@ -165,19 +220,9 @@
     return new Date(utcValue);
   }
 
-  function validateGeometry(geometry) {
-    if (geometry === null) {
-      return geometry;
-    }
-    if (!geometry || typeof geometry !== "object" || Array.isArray(geometry)) {
-      throw new Error("Geometry must be a JSON object or empty.");
-    }
-    if (geometry.type !== "Polygon" || !Array.isArray(geometry.coordinates)) {
-      throw new Error("Geometry must be a GeoJSON Polygon object.");
-    }
-    const ring = geometry.coordinates[0];
+  function validateGeometryRing(ring) {
     if (!Array.isArray(ring) || ring.length < 4) {
-      throw new Error("Invalid geometry: polygon needs at least 3 points.");
+      throw new Error("Invalid geometry: polygon ring needs at least 4 coordinate pairs.");
     }
     ring.forEach(function (position) {
       if (!Array.isArray(position) || position.length < 2) {
@@ -203,7 +248,117 @@
     if (uniquePoints.size < 3) {
       throw new Error("Invalid geometry: polygon needs at least 3 points.");
     }
+  }
+
+  function validatePolygonRings(polygon) {
+    if (!Array.isArray(polygon) || !polygon.length) {
+      throw new Error("Geometry coordinates must include at least one ring.");
+    }
+    polygon.forEach(validateGeometryRing);
+  }
+
+  function validateGeometry(geometry) {
+    if (geometry === null) {
+      return geometry;
+    }
+    if (!geometry || typeof geometry !== "object" || Array.isArray(geometry)) {
+      throw new Error("Geometry must be a JSON object or empty.");
+    }
+    if (geometry.type === "Polygon") {
+      validatePolygonRings(geometry.coordinates);
+    } else if (geometry.type === "MultiPolygon") {
+      if (!Array.isArray(geometry.coordinates) || !geometry.coordinates.length) {
+        throw new Error("Geometry MultiPolygon must include at least one polygon.");
+      }
+      geometry.coordinates.forEach(validatePolygonRings);
+    } else {
+      throw new Error("Geometry must be a GeoJSON Polygon or MultiPolygon object.");
+    }
     return geometry;
+  }
+
+  function validateAffectedZones(affectedZones) {
+    if (!Array.isArray(affectedZones)) {
+      throw new Error("affectedZones must be an array.");
+    }
+    affectedZones.forEach(function (zoneUrl) {
+      if (typeof zoneUrl !== "string" || !zoneUrl.trim()) {
+        throw new Error("affectedZones values must be non-empty NWS zone URLs.");
+      }
+      let url;
+      try {
+        url = new URL(zoneUrl.trim());
+      } catch (_error) {
+        throw new Error("affectedZones must contain valid NWS zone URLs.");
+      }
+      const pathParts = url.pathname.split("/").filter(Boolean);
+      const zoneId = pathParts[2] || "";
+      const valid = url.hostname === "api.weather.gov" &&
+        pathParts.length === 3 &&
+        pathParts[0] === "zones" &&
+        ["forecast", "county", "fire"].includes(pathParts[1]) &&
+        /^[A-Z]{2}[CZ]\d{3}$/.test(zoneId);
+      if (!valid) {
+        throw new Error("affectedZones must contain NWS forecast, county, or fire zone URLs.");
+      }
+    });
+  }
+
+  function readAffectedZonesField() {
+    const affectedZones = splitListInput(byId("field-affectedZones").value);
+    validateAffectedZones(affectedZones);
+    return affectedZones;
+  }
+
+  function readGeocodeFields() {
+    const ugc = splitListInput(byId("field-geocode-ugc").value);
+    const same = splitListInput(byId("field-geocode-same").value);
+    const geocode = {};
+    if (ugc.length) {
+      geocode.UGC = ugc;
+    }
+    if (same.length) {
+      geocode.SAME = same;
+    }
+    return Object.keys(geocode).length ? geocode : null;
+  }
+
+  function validateGeocode(geocode) {
+    if (geocode === null || geocode === undefined) {
+      return;
+    }
+    if (typeof geocode !== "object" || Array.isArray(geocode)) {
+      throw new Error("geocode must be an object or empty.");
+    }
+    ["UGC", "SAME"].forEach(function (fieldName) {
+      const value = geocode[fieldName];
+      if (value === undefined || value === null) {
+        return;
+      }
+      if (!Array.isArray(value) || value.some(function (item) {
+        return typeof item !== "string" || !item.trim();
+      })) {
+        throw new Error(`geocode.${fieldName} must be an array of strings.`);
+      }
+    });
+  }
+
+  function validateRelativeTime(relativeTime) {
+    if (relativeTime === null || relativeTime === undefined) {
+      return false;
+    }
+    if (typeof relativeTime !== "object" || Array.isArray(relativeTime)) {
+      throw new Error("relative_time must be an object.");
+    }
+    const effective = relativeTime.effective_minutes_from_now;
+    const expires = relativeTime.expires_minutes_from_now;
+    if (!Number.isFinite(Number(effective)) || !Number.isFinite(Number(expires))) {
+      throw new Error("relative_time offsets must be numbers.");
+    }
+    if (Number(expires) <= Number(effective)) {
+      throw new Error("relative_time expires offset must be after effective offset.");
+    }
+    return true;
   }
 
   function validateGeometryForUi(geometry) {
@@ -235,10 +390,13 @@
       if (typeof alert.enabled !== "boolean") {
         throw new Error(`Alert ${alert.id} enabled must be true or false.`);
       }
-      const effectiveAt = parseUtcRequired(alert.effective || "", `Alert ${alert.id} effective`);
-      const expiresAt = parseUtcRequired(alert.expires || "", `Alert ${alert.id} expires`);
-      if (expiresAt <= effectiveAt && !(alert.enabled === false && expiresAt <= new Date())) {
-        throw new Error("Invalid timestamp: expires must be after effective.");
+      const hasRelativeTime = validateRelativeTime(alert.relative_time);
+      if (!hasRelativeTime) {
+        const effectiveAt = parseUtcRequired(alert.effective || "", `Alert ${alert.id} effective`);
+        const expiresAt = parseUtcRequired(alert.expires || "", `Alert ${alert.id} expires`);
+        if (expiresAt <= effectiveAt && !(alert.enabled === false && expiresAt <= new Date())) {
+          throw new Error("Invalid timestamp: expires must be after effective.");
+        }
       }
       if (!severityValues.includes(alert.severity)) {
         throw new Error(`Alert ${alert.id} severity must be a supported value.`);
@@ -250,6 +408,8 @@
         throw new Error(`Alert ${alert.id} certainty must be a supported value.`);
       }
       validateGeometry(alert.geometry ?? null);
+      validateAffectedZones(alert.affectedZones || []);
+      validateGeocode(alert.geocode);
       if (alert.parameters !== null && alert.parameters !== undefined && (typeof alert.parameters !== "object" || Array.isArray(alert.parameters))) {
         throw new Error(`Alert ${alert.id} parameters must be an object or empty.`);
       }
@@ -259,6 +419,22 @@
   function fillSelect(id, values, currentValue) {
     const select = byId(id);
     const uniqueValues = [...new Set(values.filter(Boolean))].sort();
+    if (select.tagName !== "SELECT") {
+      const datalistId = select.getAttribute("list");
+      const datalist = datalistId ? byId(datalistId) : null;
+      if (datalist) {
+        datalist.replaceChildren(...uniqueValues.map(function (value) {
+          const option = document.createElement("option");
+          option.value = value;
+          option.label = `${eventCategory(value)} - ${value}`;
+          return option;
+        }));
+      }
+      if (currentValue !== undefined) {
+        select.value = currentValue || "";
+      }
+      return;
+    }
     select.replaceChildren(new Option("", ""));
     uniqueValues.forEach(function (value) {
       select.append(new Option(value, value));
@@ -300,8 +476,52 @@
       effective: formatUtc(new Date(nowMs - 60 * 60 * 1000)),
       expires: formatUtc(new Date(nowMs + 2 * 60 * 60 * 1000)),
       geometry: null,
+      affectedZones: [],
+      geocode: null,
       parameters: {},
     };
+  }
+
+  function activeLocation() {
+    return (window.MOLECAST_TEST_ALERT_CONFIG && window.MOLECAST_TEST_ALERT_CONFIG.activeLocation) || {};
+  }
+
+  function targetAreaDesc() {
+    const location = activeLocation();
+    const target = payload && payload.metadata && payload.metadata.target ? payload.metadata.target : {};
+    return location.county || target.county || "Kalamazoo";
+  }
+
+  function zoneIdToUrl(zoneId, zoneType) {
+    const cleanId = String(zoneId || "").trim().toUpperCase();
+    if (!/^[A-Z]{2}[CZ]\d{3}$/.test(cleanId)) {
+      return "";
+    }
+    return `https://api.weather.gov/zones/${zoneType}/${cleanId}`;
+  }
+
+  function defaultForecastZoneUrl() {
+    const location = activeLocation();
+    return zoneIdToUrl(location.forecast_zone || "MIZ072", "forecast");
+  }
+
+  function defaultCountyZoneUrl() {
+    const location = activeLocation();
+    return zoneIdToUrl(location.county_zone || "MIC077", "county");
+  }
+
+  function defaultForecastUgc() {
+    const location = activeLocation();
+    return String(location.forecast_zone || "MIZ072").trim().toUpperCase();
+  }
+
+  function defaultCountyUgc() {
+    const location = activeLocation();
+    return String(location.county_zone || "MIC077").trim().toUpperCase();
+  }
+
+  function defaultSame() {
+    return targetAreaDesc() === "Kalamazoo" ? "026077" : "";
   }
 
   function ensurePayloadReady() {
@@ -375,15 +595,20 @@
   function clearSelectedAlertForm() {
     selectedIndex = -1;
     byId("field-enabled").checked = false;
-    fillSelect("field-event", eventValues, "");
+    fillSelect("field-event", allEventValues(), "");
     ["id", "source", "severity", "urgency", "certainty", "headline", "description", "instruction", "areaDesc", "effective", "expires"].forEach(function (field) {
       byId(`field-${field}`).value = "";
     });
     byId("field-geometry").value = "";
+    byId("field-affectedZones").value = "";
+    byId("field-geocode-ugc").value = "";
+    byId("field-geocode-same").value = "";
     byId("field-parameters").value = "{}";
     renderParameterFields({});
     geometryDrawPoints = [];
     geometryEditEnabled = false;
+    setAlertGeometryMode("polygon", { clearGeometry: false, updateStatus: false });
+    setGeometryMode("rectangle");
     updateLocalTimes();
     renderSelectedGeometryOnMap(null, false);
   }
@@ -783,6 +1008,9 @@
   }
 
   function updateRectanglePreview() {
+    if (alertGeometryMode !== "polygon") {
+      return;
+    }
     if (byId("geometry-shape-type").value !== "rectangle" || geometryMode !== "rectangle") {
       return;
     }
@@ -796,6 +1024,9 @@
   }
 
   function validateGeometryControlsBeforeSave() {
+    if (alertGeometryMode !== "polygon") {
+      return;
+    }
     if (byId("geometry-shape-type").value === "rectangle" || geometryMode === "rectangle") {
       const hasRectangleInput = ["geometry-center-lat", "geometry-center-lon"].some(function (id) {
         return byId(id).value.trim();
@@ -979,6 +1210,9 @@
   }
 
   function readCurrentGeometryForMap() {
+    if (alertGeometryMode !== "polygon") {
+      return null;
+    }
     const raw = byId("field-geometry")?.value.trim();
     if (!raw) {
       return null;
@@ -998,6 +1232,50 @@
       severity: byId("field-severity")?.value || selectedAlert.severity || "",
     };
     renderGeometryOnMap(geometry, alert, fitBounds !== false);
+  }
+
+  function inferAlertGeometryMode(alert) {
+    if (alert && alert.geometry) {
+      return "polygon";
+    }
+    return Array.isArray(alert && alert.affectedZones) && alert.affectedZones.length ? "zone" : "none";
+  }
+
+  function setAlertGeometryMode(nextMode, options) {
+    alertGeometryMode = ["zone", "none"].includes(nextMode) ? nextMode : "polygon";
+    const selector = byId("geometry-alert-mode");
+    if (selector) {
+      selector.value = alertGeometryMode;
+    }
+    const polygonPanel = byId("polygon-mode-panel");
+    const zonePanel = byId("zone-mode-panel");
+    if (polygonPanel) {
+      polygonPanel.hidden = alertGeometryMode !== "polygon";
+    }
+    if (zonePanel) {
+      zonePanel.hidden = alertGeometryMode !== "zone";
+    }
+
+    if (alertGeometryMode !== "polygon") {
+      geometryDrawPoints = [];
+      geometryEditEnabled = false;
+      setGeometryMode("polygon");
+      if (!options || options.clearGeometry !== false) {
+        commitGeometryState(null);
+      } else {
+        renderSelectedGeometryOnMap(null, false);
+      }
+      if (alertGeometryMode === "zone" && (!options || options.updateStatus !== false)) {
+        setGeometryStatus("Zone mode selected. The saved alert uses affectedZones and geometry stays null.");
+      } else if (!options || options.updateStatus !== false) {
+        setGeometryStatus("None mode selected. The saved alert has no geometry and no affectedZones.");
+      }
+      return;
+    }
+
+    if (!options || options.updateStatus !== false) {
+      setGeometryStatus("Polygon mode selected. Draw or edit GeoJSON in longitude, latitude order.");
+    }
   }
 
   function getTargetCenter() {
@@ -1145,6 +1423,9 @@
   }
 
   function setGeometryMode(nextMode) {
+    if (alertGeometryMode === "zone") {
+      nextMode = "polygon";
+    }
     geometryMode = nextMode;
     byId("geometry-shape-type").value = nextMode === "draw" ? "polygon" : nextMode;
     byId("geometry-half-width").disabled = nextMode !== "rectangle";
@@ -1157,6 +1438,7 @@
   }
 
   function startPolygonDrawing() {
+    setAlertGeometryMode("polygon", { clearGeometry: false, updateStatus: false });
     geometryEditEnabled = false;
     geometryDrawPoints = [];
     setGeometryMode("draw");
@@ -1165,6 +1447,7 @@
   }
 
   function togglePolygonEditing() {
+    setAlertGeometryMode("polygon", { clearGeometry: false, updateStatus: false });
     const geometry = readCurrentGeometryForMap();
     if (!geometry) {
       geometryEditEnabled = false;
@@ -1181,6 +1464,7 @@
   }
 
   function clearGeometry() {
+    setAlertGeometryMode("polygon", { clearGeometry: false, updateStatus: false });
     setGeometryMode("rectangle");
     commitGeometryState(null);
     setGeometryStatus("Geometry cleared.");
@@ -1201,11 +1485,14 @@
   function renderSelectedAlertForm(alert) {
     alert.source = alert.source || "test";
     byId("field-enabled").checked = alert.enabled === true;
-    fillSelect("field-event", eventValues, alert.event || "");
+    fillSelect("field-event", allEventValues(), alert.event || "");
     ["id", "source", "severity", "urgency", "certainty", "headline", "description", "instruction", "areaDesc", "effective", "expires"].forEach(function (field) {
       byId(`field-${field}`).value = alert[field] || "";
     });
     byId("field-geometry").value = prettyJson(alert.geometry);
+    byId("field-affectedZones").value = Array.isArray(alert.affectedZones) ? alert.affectedZones.join("\n") : "";
+    byId("field-geocode-ugc").value = Array.isArray(alert.geocode?.UGC) ? alert.geocode.UGC.join(", ") : "";
+    byId("field-geocode-same").value = Array.isArray(alert.geocode?.SAME) ? alert.geocode.SAME.join(", ") : "";
     byId("field-parameters").value = prettyJson(alert.parameters || {});
     renderParameterFields(alert.parameters || {});
     geometryDrawPoints = [];
@@ -1215,6 +1502,7 @@
     byId("geometry-half-width").disabled = geometryMode !== "rectangle";
     byId("draw-polygon").classList.remove("is-active");
     byId("edit-polygon").classList.remove("is-active");
+    setAlertGeometryMode(inferAlertGeometryMode(alert), { clearGeometry: false, updateStatus: false });
     updateLocalTimes();
   }
 
@@ -1227,25 +1515,38 @@
     if (!event) {
       throw new Error("Missing required field: event");
     }
+    const requestedMode = byId("geometry-alert-mode").value;
+    const mode = ["zone", "none"].includes(requestedMode) ? requestedMode : "polygon";
+    alertGeometryMode = mode;
     validateGeometryControlsBeforeSave();
-    const geometry = validateGeometry(parseJsonField("field-geometry", "Geometry"));
+    const geometry = mode === "polygon" ? validateGeometry(parseJsonField("field-geometry", "Geometry")) : null;
+    if (mode !== "polygon") {
+      setGeometryField(null);
+    }
+    const affectedZones = mode === "zone" ? readAffectedZonesField() : [];
+    if (mode === "zone" && affectedZones.length === 0) {
+      throw new Error("Zone mode requires at least one affected NWS zone URL.");
+    }
+    const geocode = mode === "zone" ? readGeocodeFields() : null;
     const parameters = syncFriendlyParametersToRaw();
     const effective = validateUtc(byId("field-effective").value.trim(), "Effective");
     const expires = validateUtc(byId("field-expires").value.trim(), "Expires");
-    if (!effective) {
+    const existingAlert = currentAlerts()[selectedIndex] || {};
+    const hasRelativeTime = validateRelativeTime(existingAlert.relative_time);
+    if (!effective && !hasRelativeTime) {
       throw new Error("Missing required field: effective");
     }
-    if (!expires) {
+    if (!expires && !hasRelativeTime) {
       throw new Error("Missing required field: expires");
     }
-    if (new Date(expires) <= new Date(effective) && byId("field-enabled").checked) {
+    if (effective && expires && new Date(expires) <= new Date(effective) && byId("field-enabled").checked) {
       throw new Error("Invalid timestamp: expires must be after effective.");
     }
     const areaDesc = byId("field-areaDesc").value.trim();
     if (!areaDesc) {
       setEditorMessage("Warning: areaDesc is blank; active alert matching may fall back to defaults.", "warning");
     }
-    return {
+    const updated = {
       enabled: byId("field-enabled").checked,
       id,
       source: byId("field-source").value.trim() || "test",
@@ -1260,8 +1561,14 @@
       effective,
       expires,
       geometry,
+      affectedZones,
+      geocode,
       parameters,
     };
+    if (hasRelativeTime) {
+      updated.relative_time = cloneValue(existingAlert.relative_time);
+    }
+    return updated;
   }
 
   function applyFormToPayload() {
@@ -1476,11 +1783,101 @@
     await saveAll({ applyForm: false, keepSelectedId: currentAlerts()[selectedIndex]?.id });
   }
 
+  function ensureEditableAlert() {
+    ensurePayloadReady();
+    if (selectedIndex >= 0 && currentAlerts()[selectedIndex]) {
+      return;
+    }
+    payload.alerts.push(makeEmptyAlert());
+    selectedIndex = payload.alerts.length - 1;
+    renderSelectedAlertForm(payload.alerts[selectedIndex]);
+  }
+
+  function setPresetBase(idPrefix, event, severity, urgency, certainty) {
+    const now = Date.now();
+    byId("field-id").value = `${idPrefix}-${formatUtc(new Date(now)).replace(/[^0-9]/g, "")}`;
+    byId("field-source").value = "test";
+    fillSelect("field-event", allEventValues(), event);
+    byId("field-severity").value = severity;
+    byId("field-urgency").value = urgency;
+    byId("field-certainty").value = certainty;
+    byId("field-areaDesc").value = targetAreaDesc();
+    byId("field-enabled").checked = false;
+    byId("field-effective").value = formatUtc(new Date(now - 60 * 60 * 1000));
+    byId("field-expires").value = formatUtc(new Date(now + 2 * 60 * 60 * 1000));
+    if (selectedIndex >= 0 && currentAlerts()[selectedIndex]) {
+      currentAlerts()[selectedIndex].relative_time = {
+        effective_minutes_from_now: -5,
+        expires_minutes_from_now: 90,
+      };
+    }
+    updateLocalTimes();
+  }
+
+  function applyPolygonPreset(kind) {
+    ensureEditableAlert();
+    const isStorm = kind === "storm";
+    setAlertGeometryMode("polygon", { clearGeometry: false, updateStatus: false });
+    setGeometryMode("rectangle");
+    setPresetBase(
+      isStorm ? "test-flash-flood-warning-polygon" : "test-severe-thunderstorm-warning-polygon",
+      isStorm ? "Flash Flood Warning" : "Severe Thunderstorm Warning",
+      "Severe",
+      "Immediate",
+      "Likely",
+    );
+    byId("field-headline").value = isStorm ? "TEST: Flash Flood Warning polygon" : "TEST: Severe Thunderstorm Warning polygon";
+    byId("field-description").value = isStorm
+      ? "Local polygon-mode flash flood warning test alert."
+      : "Local polygon-mode severe thunderstorm warning test alert.";
+    byId("field-instruction").value = isStorm ? "Move to higher ground." : "";
+    byId("field-affectedZones").value = "";
+    byId("field-geocode-ugc").value = "";
+    byId("field-geocode-same").value = "";
+    const parameters = isStorm
+      ? { flashFloodDamageThreat: ["CONSIDERABLE"], radarIndicated: ["true"] }
+      : { thunderstormDamageThreat: ["CONSIDERABLE"], windGust: ["70 MPH"], hailSize: ["1.75 IN"] };
+    byId("field-parameters").value = prettyJson(parameters);
+    renderParameterFields(parameters);
+    useTargetCenter();
+    setEditorMessage("Polygon preset applied", "success");
+  }
+
+  function applyZonePreset(kind) {
+    ensureEditableAlert();
+    const isForecast = kind === "forecast";
+    const zoneUrl = isForecast ? defaultForecastZoneUrl() : defaultCountyZoneUrl();
+    const ugc = isForecast ? defaultForecastUgc() : defaultCountyUgc();
+    setPresetBase(
+      isForecast ? "test-forecast-zone-alert" : "test-county-zone-alert",
+      isForecast ? "Winter Weather Advisory" : "Wind Advisory",
+      "Minor",
+      "Expected",
+      "Likely",
+    );
+    byId("field-headline").value = isForecast ? "TEST: Forecast zone alert" : "TEST: County zone alert";
+    byId("field-description").value = isForecast
+      ? "Local forecast-zone test alert using affectedZones."
+      : "Local county-zone test alert using affectedZones.";
+    byId("field-instruction").value = "";
+    byId("field-affectedZones").value = zoneUrl;
+    byId("field-geocode-ugc").value = ugc;
+    byId("field-geocode-same").value = isForecast ? "" : defaultSame();
+    byId("field-parameters").value = prettyJson(
+      isForecast
+        ? { NWSheadline: ["FORECAST ZONE TEST USING AFFECTED ZONE GEOMETRY"] }
+        : { NWSheadline: ["COUNTY ZONE TEST USING AFFECTED ZONE GEOMETRY"] }
+    );
+    renderParameterFields(getParameterObjectFromRaw());
+    setAlertGeometryMode("zone");
+    setEditorMessage("Zone preset applied", "success");
+  }
+
   function wireEvents() {
     fillSelect("field-severity", severityValues);
     fillSelect("field-urgency", urgencyValues);
     fillSelect("field-certainty", certaintyValues);
-    fillSelect("field-event", eventValues);
+    fillSelect("field-event", allEventValues());
     byId("reload-alerts").addEventListener("click", function () {
       loadAlerts({
         keepSelectedId: selectedAlertId(),
@@ -1510,6 +1907,14 @@
     });
     byId("set-active-now").addEventListener("click", function () {
       setActiveNow().catch(showError);
+    });
+    byId("preset-storm-polygon").addEventListener("click", function () { applyPolygonPreset("storm"); });
+    byId("preset-severe-polygon").addEventListener("click", function () { applyPolygonPreset("severe"); });
+    byId("preset-forecast-zone").addEventListener("click", function () { applyZonePreset("forecast"); });
+    byId("preset-county-zone").addEventListener("click", function () { applyZonePreset("county"); });
+    byId("geometry-alert-mode").addEventListener("change", function () {
+      const nextMode = byId("geometry-alert-mode").value;
+      setAlertGeometryMode(nextMode);
     });
     byId("use-target-center").addEventListener("click", function () {
       try {

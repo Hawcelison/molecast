@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from app.alerts import test_alert_loader as loader_module
+from app.alerts.presentation import build_alert_presentation
 from app.api.routes import test_alerts as test_alerts_route
 from app.models.location import Location
 from app.services import alert_service
@@ -58,6 +59,16 @@ def _alert(**overrides) -> dict:
     }
     data.update(overrides)
     return data
+
+
+class FakeZoneGeometryService:
+    def __init__(self, geometry: dict) -> None:
+        self.geometry = geometry
+        self.calls: list[list[str]] = []
+
+    def resolve_affected_zones(self, affected_zones: list[str] | None) -> dict | None:
+        self.calls.append(list(affected_zones or []))
+        return self.geometry
 
 
 def _write_payload(alert_file, *alerts) -> str:
@@ -189,6 +200,193 @@ def test_test_alerts_expose_same_core_dto_fields_as_nws_alerts(tmp_path, monkeyp
     assert payload["nws_details"]["tornadoDetection"] == "OBSERVED"
 
 
+def test_known_catalog_event_polygon_mode_works_with_non_tornado_event(tmp_path, monkeypatch) -> None:
+    current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)
+    monkeypatch.setattr(alert_service, "now_utc", lambda: current_time)
+    alert_file = tmp_path / "alerts_test.json"
+    _write_payload(
+        alert_file,
+        _alert(
+            id="flash-flood-polygon",
+            event="Flash Flood Warning",
+            severity="Severe",
+            urgency="Immediate",
+            certainty="Likely",
+            relative_time={
+                "effective_minutes_from_now": -5,
+                "expires_minutes_from_now": 90,
+            },
+        ),
+    )
+
+    features = loader_module.TestAlertLoader(_settings(alert_file)).load_enabled_alert_features(_location())
+    alert = parse_nws_alerts({"features": features}, _location(), source="test")[0]
+
+    assert alert.event == "Flash Flood Warning"
+    assert alert.geometry is not None
+    assert alert.geometry_source == "alert"
+    assert alert.color_hex == "#00FF00"
+
+
+def test_loader_preserves_zone_alert_fields(tmp_path, monkeypatch) -> None:
+    current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)
+    alert_file = tmp_path / "alerts_test.json"
+    zone_url = "https://api.weather.gov/zones/forecast/MIZ072"
+    _write_payload(
+        alert_file,
+        _alert(
+            event="Freeze Watch",
+            severity="Severe",
+            urgency="Future",
+            certainty="Possible",
+            geometry=None,
+            affectedZones=[zone_url],
+            geocode={"UGC": ["MIZ072"], "SAME": ["026077"]},
+        ),
+    )
+
+    feature = loader_module.TestAlertLoader(_settings(alert_file)).load_enabled_alert_features(_location())[0]
+
+    assert feature["geometry"] is None
+    assert feature["properties"]["affectedZones"] == [zone_url]
+    assert feature["properties"]["geocode"] == {"UGC": ["MIZ072"], "SAME": ["026077"]}
+
+
+def test_zone_mode_test_alert_gets_affected_zone_fallback_geometry(tmp_path, monkeypatch) -> None:
+    current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)
+    monkeypatch.setattr(alert_service, "now_utc", lambda: current_time)
+    alert_file = tmp_path / "alerts_test.json"
+    zone_url = "https://api.weather.gov/zones/forecast/MIZ072"
+    fallback_geometry = {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [-85.7, 42.1],
+                [-85.4, 42.1],
+                [-85.4, 42.3],
+                [-85.7, 42.1],
+            ]
+        ],
+    }
+    _write_payload(
+        alert_file,
+        _alert(
+            event="Freeze Watch",
+            severity="Severe",
+            urgency="Future",
+            certainty="Possible",
+            geometry=None,
+            affectedZones=[zone_url],
+            geocode={"UGC": ["MIZ072"]},
+            relative_time={
+                "effective_minutes_from_now": -5,
+                "expires_minutes_from_now": 90,
+            },
+        ),
+    )
+
+    features = loader_module.TestAlertLoader(_settings(alert_file)).load_enabled_alert_features(_location())
+    zone_service = FakeZoneGeometryService(fallback_geometry)
+    alert = parse_nws_alerts(
+        {"features": features},
+        _location(),
+        source="test",
+        zone_geometry_service=zone_service,
+    )[0]
+
+    assert alert.geometry == fallback_geometry
+    assert alert.geometry_source == "affectedZones"
+    assert alert.affectedZones == [zone_url]
+    assert zone_service.calls == [[zone_url]]
+
+
+def test_zone_mode_works_with_non_freeze_event(tmp_path, monkeypatch) -> None:
+    current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)
+    monkeypatch.setattr(alert_service, "now_utc", lambda: current_time)
+    alert_file = tmp_path / "alerts_test.json"
+    zone_url = "https://api.weather.gov/zones/forecast/MIZ072"
+    fallback_geometry = {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [-85.7, 42.1],
+                [-85.4, 42.1],
+                [-85.4, 42.3],
+                [-85.7, 42.1],
+            ]
+        ],
+    }
+    _write_payload(
+        alert_file,
+        _alert(
+            id="winter-weather-zone",
+            event="Winter Weather Advisory",
+            severity="Minor",
+            urgency="Expected",
+            certainty="Likely",
+            geometry=None,
+            affectedZones=[zone_url],
+            geocode={"UGC": ["MIZ072"]},
+            relative_time={
+                "effective_minutes_from_now": -5,
+                "expires_minutes_from_now": 90,
+            },
+        ),
+    )
+
+    features = loader_module.TestAlertLoader(_settings(alert_file)).load_enabled_alert_features(_location())
+    alert = parse_nws_alerts(
+        {"features": features},
+        _location(),
+        source="test",
+        zone_geometry_service=FakeZoneGeometryService(fallback_geometry),
+    )[0]
+
+    assert alert.event == "Winter Weather Advisory"
+    assert alert.geometry_source == "affectedZones"
+    assert alert.geometry == fallback_geometry
+    assert alert.affectedZones == [zone_url]
+
+
+def test_unknown_custom_event_saves_and_uses_backend_fallback_presentation(tmp_path, monkeypatch) -> None:
+    current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)
+    monkeypatch.setattr(alert_service, "now_utc", lambda: current_time)
+    alert_file = tmp_path / "alerts_test.json"
+    _write_payload(
+        alert_file,
+        _alert(
+            id="custom-local-event",
+            event="Custom NWS Style Test Event",
+            severity="Moderate",
+            urgency="Expected",
+            certainty="Possible",
+            relative_time={
+                "effective_minutes_from_now": -5,
+                "expires_minutes_from_now": 90,
+            },
+        ),
+    )
+    test_alerts_route._validate_test_alert_payload(
+        {"alerts": [_alert(event="Custom NWS Style Test Event", severity="Moderate")]}
+    )
+
+    features = loader_module.TestAlertLoader(_settings(alert_file)).load_enabled_alert_features(_location())
+    alert = parse_nws_alerts({"features": features}, _location(), source="test")[0]
+    presentation = build_alert_presentation(alert, _location())
+
+    assert alert.event == "Custom NWS Style Test Event"
+    assert alert.color_hex == "#FFFF00"
+    assert alert.icon == "alert-circle"
+    assert alert.sound_profile == "default"
+    assert alert.priority == 300
+    assert presentation.title == "CUSTOM NWS STYLE TEST EVENT"
+
+
 def test_editor_validation_accepts_relative_time_without_absolute_timestamps() -> None:
     payload = {
         "alerts": [
@@ -206,3 +404,95 @@ def test_editor_validation_accepts_relative_time_without_absolute_timestamps() -
     validated = test_alerts_route._validate_test_alert_payload(payload)
 
     assert validated["alerts"][0]["relative_time"]["expires_minutes_from_now"] == 90
+
+
+def test_editor_validation_accepts_zone_mode_alert() -> None:
+    zone_url = "https://api.weather.gov/zones/forecast/MIZ072"
+    payload = {
+        "alerts": [
+            _alert(
+                geometry=None,
+                affectedZones=[zone_url],
+                geocode={"UGC": ["MIZ072"], "SAME": ["026077"]},
+            )
+        ]
+    }
+
+    validated = test_alerts_route._validate_test_alert_payload(payload)
+
+    assert validated["alerts"][0]["geometry"] is None
+    assert validated["alerts"][0]["affectedZones"] == [zone_url]
+
+
+def test_editor_validation_accepts_multipolygon_geometry() -> None:
+    payload = {
+        "alerts": [
+            _alert(
+                geometry={
+                    "type": "MultiPolygon",
+                    "coordinates": [
+                        [
+                            [
+                                [-85.7, 42.1],
+                                [-85.4, 42.1],
+                                [-85.4, 42.3],
+                                [-85.7, 42.1],
+                            ]
+                        ]
+                    ],
+                },
+            )
+        ]
+    }
+
+    validated = test_alerts_route._validate_test_alert_payload(payload)
+
+    assert validated["alerts"][0]["geometry"]["type"] == "MultiPolygon"
+
+
+def test_editor_validation_rejects_invalid_polygon() -> None:
+    payload = {
+        "alerts": [
+            _alert(
+                geometry={
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [-85.7, 42.1],
+                            [-85.4, 42.1],
+                            [-85.4, 42.3],
+                        ]
+                    ],
+                },
+            )
+        ]
+    }
+
+    try:
+        test_alerts_route._validate_test_alert_payload(payload)
+    except Exception as exc:
+        assert "polygon ring needs at least 4 coordinate pairs" in exc.detail
+    else:
+        raise AssertionError("Invalid polygon should be rejected.")
+
+
+def test_editor_validation_rejects_invalid_affected_zones() -> None:
+    payload = {"alerts": [_alert(geometry=None, affectedZones=["https://example.com/zones/forecast/MIZ072"])]}
+
+    try:
+        test_alerts_route._validate_test_alert_payload(payload)
+    except Exception as exc:
+        assert "affectedZones must contain NWS zone URLs" in exc.detail
+    else:
+        raise AssertionError("Invalid affectedZones should be rejected.")
+
+
+def test_editor_validation_rejects_non_list_geocode_values() -> None:
+    payload = {"alerts": [_alert(geometry=None, geocode={"UGC": "MIZ072"})]}
+
+    try:
+        test_alerts_route._validate_test_alert_payload(payload)
+    except Exception as exc:
+        assert "geocode.UGC must be an array" in exc.detail
+    else:
+        raise AssertionError("Invalid geocode should be rejected.")

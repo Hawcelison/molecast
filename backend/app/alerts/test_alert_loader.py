@@ -127,6 +127,8 @@ class TestAlertLoader:
             "areaDesc": area_desc,
             "effective": effective,
             "expires": expires,
+            "affectedZones": raw_alert.get("affectedZones"),
+            "geocode": raw_alert.get("geocode"),
             "parameters": raw_alert.get("parameters"),
         }
         effective_at = parse_alert_time_utc(properties["effective"])

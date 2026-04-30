@@ -1093,6 +1093,17 @@ button {
   gap: 0.5rem;
 }
 
+#polygon-mode-panel,
+.zone-mode-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+[hidden] {
+  display: none !important;
+}
+
 .geometry-map {
   background: #e5e7eb;
   border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
