@@ -252,6 +252,135 @@ table {
   width: 100%;
 }
 
+.location-panel {
+  border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  box-sizing: border-box;
+  padding: 0.75rem 1rem;
+  width: 100%;
+}
+
+.location-panel__summary {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.location-panel__title,
+.location-panel__status,
+.location-editor__message {
+  margin: 0;
+}
+
+.location-panel__title {
+  font-size: 0.98rem;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.location-panel__status {
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.25;
+  margin-top: 0.18rem;
+}
+
+.location-panel__button {
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 6px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 750;
+  padding: 0.45rem 0.65rem;
+}
+
+.location-panel__button--primary {
+  background: #166534;
+  border-color: #166534;
+  color: #ffffff;
+}
+
+.location-panel__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.location-editor {
+  margin-top: 0.75rem;
+}
+
+.location-editor__form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.location-editor__grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.location-editor label {
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: 0.25rem;
+  line-height: 1.2;
+}
+
+.location-editor input {
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 6px;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.92rem;
+  min-width: 0;
+  padding: 0.48rem 0.55rem;
+  width: 100%;
+}
+
+.location-editor__message {
+  font-size: 0.86rem;
+  font-weight: 750;
+  min-height: 1.2rem;
+}
+
+.location-editor__message[data-state="error"] {
+  color: #b91c1c;
+}
+
+.location-editor__message[data-state="success"] {
+  color: #166534;
+}
+
+.location-editor__message[data-state="pending"] {
+  color: color-mix(in srgb, currentColor 72%, transparent);
+}
+
+.location-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (max-width: 760px) {
+  .location-panel__summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .location-panel__button {
+    width: 100%;
+  }
+
+  .location-editor__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 #map {
   width: 100%;
   min-height: 420px;

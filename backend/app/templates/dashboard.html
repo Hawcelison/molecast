@@ -13,6 +13,7 @@
 <script src="/static/js/modules/alert-flash.js" defer></script>
 <script src="/static/js/modules/alert-audio.js" defer></script>
 <script src="/static/js/modules/alert-banners.js?v=desktop-alert-tray-20260429" defer></script>
+<script src="/static/js/location-editor.js?v=active-location-editor-v1" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -20,6 +21,68 @@
   <div id="alert-controls" class="alert-controls" aria-label="Alert controls"></div>
   <div id="alert-banner-container" class="alert-banner-container" role="list" aria-live="polite"></div>
   <h1>Molecast</h1>
+  <section class="location-panel" aria-labelledby="active-location-display">
+    <div class="location-panel__summary">
+      <div>
+        <p id="active-location-display" class="location-panel__title">Location: Loading</p>
+        <p id="location-metadata-status" class="location-panel__status">NWS metadata: checking</p>
+      </div>
+      <button
+        id="location-editor-toggle"
+        class="location-panel__button"
+        type="button"
+        aria-controls="location-editor-panel"
+        aria-expanded="false"
+      >Edit location</button>
+    </div>
+    <div id="location-editor-panel" class="location-editor" hidden>
+      <form id="location-editor-form" class="location-editor__form">
+        <div class="location-editor__grid">
+          <label>
+            Label
+            <input id="location-label" name="label" type="text" maxlength="120" autocomplete="off">
+          </label>
+          <label>
+            Name
+            <input id="location-name" name="name" type="text" maxlength="120" autocomplete="off">
+          </label>
+          <label>
+            Latitude
+            <input id="location-latitude" name="latitude" type="number" step="0.0001" min="-90" max="90" required>
+          </label>
+          <label>
+            Longitude
+            <input id="location-longitude" name="longitude" type="number" step="0.0001" min="-180" max="180" required>
+          </label>
+          <label>
+            City
+            <input id="location-city" name="city" type="text" maxlength="80" autocomplete="address-level2">
+          </label>
+          <label>
+            County
+            <input id="location-county" name="county" type="text" maxlength="80" autocomplete="off">
+          </label>
+          <label>
+            State
+            <input id="location-state" name="state" type="text" maxlength="2" autocomplete="address-level1">
+          </label>
+          <label>
+            ZIP code
+            <input id="location-zip-code" name="zip_code" type="text" inputmode="numeric" maxlength="10" autocomplete="postal-code">
+          </label>
+          <label>
+            Default zoom
+            <input id="location-default-zoom" name="default_zoom" type="number" step="1" min="3" max="14" required>
+          </label>
+        </div>
+        <p id="location-editor-message" class="location-editor__message" role="status" aria-live="polite"></p>
+        <div class="location-editor__actions">
+          <button id="location-editor-save" class="location-panel__button location-panel__button--primary" type="submit">Save location</button>
+          <button id="location-editor-cancel" class="location-panel__button" type="button">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </section>
   <section id="current-conditions"></section>
   <section id="forecast"></section>
   <section id="map-panel">

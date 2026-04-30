@@ -108,5 +108,9 @@
     }
   }
 
+  window.MOLECAST_APP = {
+    refreshAlerts: loadAlerts,
+  };
+
   document.addEventListener("DOMContentLoaded", loadAlerts);
 })();
