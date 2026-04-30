@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+from app.alerts.presentation import build_alert_presentation
 from app.models.location import Location
 from app.services.alert_service import (
     ActiveAlertService,
@@ -40,6 +41,67 @@ def _feature(alert_id: str, event: str = "Tornado Warning") -> dict:
             "headline": f"{event} headline",
             "description": f"{event} description",
             "areaDesc": "Kalamazoo",
+            "effective": "2026-01-01T00:00:00Z",
+            "expires": "2099-01-01T00:00:00Z",
+        },
+        "geometry": None,
+    }
+
+
+def _zone_polygon(offset: int = 0) -> dict:
+    return {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [-85.7 + offset, 42.1],
+                [-85.4 + offset, 42.1],
+                [-85.4 + offset, 42.3],
+                [-85.7 + offset, 42.1],
+            ]
+        ],
+    }
+
+
+class FakeZoneGeometryService:
+    def __init__(self, geometries: dict[str, dict] | None = None, fail: bool = False) -> None:
+        self.geometries = geometries or {}
+        self.fail = fail
+        self.calls: list[list[str]] = []
+
+    def resolve_affected_zones(self, affected_zones: list[str] | None) -> dict | None:
+        self.calls.append(list(affected_zones or []))
+        if self.fail:
+            raise RuntimeError("zone geometry failed")
+        polygons = [
+            geometry["coordinates"]
+            for zone_url, geometry in self.geometries.items()
+            if affected_zones and zone_url in affected_zones and geometry.get("type") == "Polygon"
+        ]
+        if not polygons:
+            return None
+        if len(polygons) == 1:
+            return {"type": "Polygon", "coordinates": polygons[0]}
+        return {"type": "MultiPolygon", "coordinates": polygons}
+
+
+def _zone_feature(alert_id: str = "freeze-watch") -> dict:
+    return {
+        "type": "Feature",
+        "id": alert_id,
+        "properties": {
+            "id": alert_id,
+            "event": "Freeze Watch",
+            "severity": "Severe",
+            "urgency": "Future",
+            "certainty": "Possible",
+            "headline": "Freeze Watch headline",
+            "description": "Sub-freezing temperatures possible.",
+            "areaDesc": "Kalamazoo; Calhoun",
+            "affectedZones": [
+                "https://api.weather.gov/zones/forecast/MIZ072",
+                "https://api.weather.gov/zones/forecast/MIZ073",
+            ],
+            "geocode": {"UGC": ["MIZ072", "MIZ073"]},
             "effective": "2026-01-01T00:00:00Z",
             "expires": "2099-01-01T00:00:00Z",
         },
@@ -254,3 +316,94 @@ def test_persisted_location_zones_are_used_without_points_lookup() -> None:
     ]
     assert provider.points_calls == 0
     assert provider.zone_calls == ["MIC077", "MIZ072"]
+
+
+def test_alert_with_existing_geometry_keeps_alert_geometry_source() -> None:
+    feature = _feature("polygon-alert")
+    feature["geometry"] = _zone_polygon()
+    service = ActiveAlertService(
+        provider=FakeNwsAlertProvider(point_payload=_payload(feature)),
+        test_alert_loader=FakeTestAlertLoader(),
+        refresh_interval_seconds=60,
+        zone_geometry_service=FakeZoneGeometryService(),
+    )
+
+    alerts, _refreshed_at = service.refresh_active_alerts(_location())
+
+    assert alerts[0].id == "polygon-alert"
+    assert alerts[0].geometry == _zone_polygon()
+    assert alerts[0].geometry_source == "alert"
+
+
+def test_zone_alert_receives_affected_zone_fallback_geometry() -> None:
+    zone_urls = [
+        "https://api.weather.gov/zones/forecast/MIZ072",
+        "https://api.weather.gov/zones/forecast/MIZ073",
+    ]
+    zone_geometry_service = FakeZoneGeometryService(
+        {
+            zone_urls[0]: _zone_polygon(),
+            zone_urls[1]: _zone_polygon(1),
+        }
+    )
+    service = ActiveAlertService(
+        provider=FakeNwsAlertProvider(point_payload=_payload(_zone_feature())),
+        test_alert_loader=FakeTestAlertLoader(),
+        refresh_interval_seconds=60,
+        zone_geometry_service=zone_geometry_service,
+    )
+
+    alerts, _refreshed_at = service.refresh_active_alerts(_location())
+
+    alert = alerts[0]
+    assert alert.event == "Freeze Watch"
+    assert alert.geometry_source == "affectedZones"
+    assert alert.geometry is not None
+    assert alert.geometry["type"] == "MultiPolygon"
+    assert len(alert.geometry["coordinates"]) == 2
+    assert alert.color_hex == "#FFA500"
+    assert alert.affectedZones == zone_urls
+    presentation = build_alert_presentation(alert, _location())
+    assert presentation.geometry_bounds is not None
+    assert presentation.geometry_bounds.model_dump() == {
+        "west": -85.7,
+        "south": 42.1,
+        "east": -84.4,
+        "north": 42.3,
+    }
+    assert zone_geometry_service.calls == [zone_urls]
+
+
+def test_zone_geometry_failure_keeps_banner_alert_without_geometry() -> None:
+    service = ActiveAlertService(
+        provider=FakeNwsAlertProvider(point_payload=_payload(_zone_feature())),
+        test_alert_loader=FakeTestAlertLoader(),
+        refresh_interval_seconds=60,
+        zone_geometry_service=FakeZoneGeometryService(fail=True),
+    )
+
+    alerts, _refreshed_at = service.refresh_active_alerts(_location())
+
+    assert alerts[0].event == "Freeze Watch"
+    assert alerts[0].geometry is None
+    assert alerts[0].geometry_source == "none"
+
+
+def test_test_zone_alert_flows_through_same_fallback_pipeline() -> None:
+    zone_url = "https://api.weather.gov/zones/forecast/MIZ072"
+    feature = _zone_feature("test-zone-alert")
+    feature["properties"]["affectedZones"] = [zone_url]
+    feature["properties"]["geocode"] = {"UGC": ["MIZ072"]}
+    service = ActiveAlertService(
+        provider=FakeNwsAlertProvider(),
+        test_alert_loader=FakeTestAlertLoader([feature]),
+        refresh_interval_seconds=60,
+        zone_geometry_service=FakeZoneGeometryService({zone_url: _zone_polygon()}),
+    )
+
+    alerts, _refreshed_at = service.refresh_active_alerts(_location())
+
+    alert = alerts[0]
+    assert alert.source == "test"
+    assert alert.geometry_source == "affectedZones"
+    assert alert.geometry == _zone_polygon()

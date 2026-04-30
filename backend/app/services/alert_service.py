@@ -18,6 +18,7 @@ from app.models.location import Location
 from app.schemas.alert import WeatherAlert
 from app.services.alert_time import has_invalid_alert_time, now_utc, parse_alert_time_utc
 from app.services.nws_points_service import extract_points_metadata, extract_zone_id
+from app.services.nws_zone_geometry_service import NwsZoneGeometryService, nws_zone_geometry_service
 
 
 class AlertFetchError(RuntimeError):
@@ -192,10 +193,12 @@ class ActiveAlertService:
         provider: NwsAlertProvider,
         test_alert_loader: TestAlertLoader,
         refresh_interval_seconds: int,
+        zone_geometry_service: NwsZoneGeometryService | None = None,
     ) -> None:
         self.provider = provider
         self.test_alert_loader = test_alert_loader
         self.refresh_interval = timedelta(seconds=refresh_interval_seconds)
+        self.zone_geometry_service = zone_geometry_service
         self._cached_location_key: str | None = None
         self._cached_alerts: list[WeatherAlert] = []
         self._last_refreshed_at: datetime | None = None
@@ -252,7 +255,12 @@ class ActiveAlertService:
         test_payload = {
             "features": self.test_alert_loader.load_enabled_alert_features(location),
         }
-        test_alerts = parse_nws_alerts(test_payload, location, source="test")
+        test_alerts = parse_nws_alerts(
+            test_payload,
+            location,
+            source="test",
+            zone_geometry_service=self.zone_geometry_service,
+        )
 
         try:
             live_payload = self.provider.fetch_active_alerts(location)
@@ -264,7 +272,12 @@ class ActiveAlertService:
             )
             live_alerts = []
         else:
-            live_alerts = parse_nws_alerts(live_payload, location, source="nws")
+            live_alerts = parse_nws_alerts(
+                live_payload,
+                location,
+                source="nws",
+                zone_geometry_service=self.zone_geometry_service,
+            )
 
         return sort_alerts_by_priority(dedupe_alerts_by_id([*live_alerts, *test_alerts]))
 
@@ -273,6 +286,7 @@ def parse_nws_alerts(
     payload: dict[str, Any],
     location: Location,
     source: str = "nws",
+    zone_geometry_service: NwsZoneGeometryService | None = None,
 ) -> list[WeatherAlert]:
     alerts: list[WeatherAlert] = []
     logger = get_logger()
@@ -355,12 +369,30 @@ def parse_nws_alerts(
             )
             continue
 
+        geometry = normalized_alert.geometry
+        geometry_source = "alert" if geometry is not None else None
+        if geometry is None and normalized_alert.affectedZones and zone_geometry_service is not None:
+            try:
+                geometry = zone_geometry_service.resolve_affected_zones(normalized_alert.affectedZones)
+            except Exception:
+                logger.warning(
+                    "Unable to resolve affected-zone geometry; keeping alert without map geometry. "
+                    "source=%s id=%s affected_zones=%s",
+                    source,
+                    alert_id,
+                    normalized_alert.affectedZones,
+                    exc_info=True,
+                )
+                geometry = None
+            if geometry is not None:
+                geometry_source = "affectedZones"
+
         ranking = score_alert(
             normalized_alert.severity,
             normalized_alert.urgency,
             normalized_alert.certainty,
         )
-        alert_data = _weather_alert_data(normalized_alert, match, ranking)
+        alert_data = _weather_alert_data(normalized_alert, match, ranking, geometry, geometry_source)
 
         try:
             alerts.append(WeatherAlert.model_validate(alert_data))
@@ -386,7 +418,13 @@ def parse_nws_alerts(
     return sort_alerts_by_priority(alerts)
 
 
-def _weather_alert_data(normalized_alert: MolecastAlert, match: Any, ranking: Any) -> dict[str, Any]:
+def _weather_alert_data(
+    normalized_alert: MolecastAlert,
+    match: Any,
+    ranking: Any,
+    geometry: dict[str, Any] | None,
+    geometry_source: str | None,
+) -> dict[str, Any]:
     raw_properties = dict(normalized_alert.raw_properties)
     if normalized_alert.color_hex is not None:
         raw_properties["color_hex"] = normalized_alert.color_hex
@@ -414,7 +452,8 @@ def _weather_alert_data(normalized_alert: MolecastAlert, match: Any, ranking: An
         "affectedZones": normalized_alert.affectedZones,
         "effective": normalized_alert.effective,
         "expires": normalized_alert.expires,
-        "geometry": normalized_alert.geometry,
+        "geometry": geometry,
+        "geometry_source": geometry_source or "none",
         "raw_properties": raw_properties,
         "match": {
             "match_type": match.match_type,
@@ -475,4 +514,5 @@ active_alert_service = ActiveAlertService(
     provider=NwsAlertProvider(settings),
     test_alert_loader=TestAlertLoader(settings),
     refresh_interval_seconds=settings.alert_refresh_seconds,
+    zone_geometry_service=nws_zone_geometry_service,
 )

@@ -93,6 +93,7 @@ def test_normalized_alerts_flow_through_active_alerts_endpoint(monkeypatch) -> N
     assert alert["areaDesc"] == "Kalamazoo"
     assert alert["affectedZones"] == ["https://api.weather.gov/zones/county/MIC077"]
     assert alert["geometry"]["type"] == "Polygon"
+    assert alert["geometry_source"] == "alert"
     assert alert["geometry_bounds"] == {
         "west": -85.7,
         "south": 42.1,
@@ -136,6 +137,7 @@ def test_test_alert_details_use_same_dto_shape() -> None:
 
     assert payload["source"] == "test"
     assert payload["geometry"]["type"] == "Polygon"
+    assert payload["geometry_source"] == "alert"
     assert payload["affectedZones"] == ["https://api.weather.gov/zones/county/MIC077"]
     assert presentation["geometry_bounds"] == {
         "west": -85.7,

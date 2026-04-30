@@ -45,6 +45,7 @@ class WeatherAlert(BaseModel):
     effective: datetime | None = None
     expires: datetime | None = None
     geometry: dict[str, Any] | None = None
+    geometry_source: str | None = None
     raw_properties: dict[str, Any]
     match: AlertMatchMetadata
     color_hex: str
