@@ -4,6 +4,7 @@
     status: null,
     isOpen: false,
     isSaving: false,
+    isLookingUpZip: false,
   };
 
   const fieldNames = [
@@ -139,6 +140,21 @@
     return { payload };
   }
 
+  function buildZipLocation(lookup) {
+    const label = `${lookup.city}, ${lookup.state} ${lookup.zip_code}`.trim();
+    return {
+      label: label,
+      name: label,
+      city: lookup.city,
+      county: lookup.county,
+      state: lookup.state,
+      zip_code: lookup.zip_code,
+      latitude: lookup.latitude,
+      longitude: lookup.longitude,
+      default_zoom: lookup.default_zoom || 9,
+    };
+  }
+
   async function fetchJson(url, options) {
     const response = await window.fetch(url, options);
     let body = null;
@@ -181,6 +197,42 @@
   async function refreshAlerts() {
     if (window.MOLECAST_APP && typeof window.MOLECAST_APP.refreshAlerts === "function") {
       await window.MOLECAST_APP.refreshAlerts();
+    }
+  }
+
+  async function lookupZipCode() {
+    if (state.isLookingUpZip) {
+      return;
+    }
+
+    const zipField = getField("zip_code");
+    const zipCode = zipField?.value.trim();
+    if (!zipCode) {
+      setMessage("Enter a ZIP code before lookup.", "error");
+      zipField?.focus();
+      return;
+    }
+
+    const lookupButton = getElement("location-zip-lookup");
+    state.isLookingUpZip = true;
+    if (lookupButton) {
+      lookupButton.disabled = true;
+    }
+    setMessage("Looking up ZIP code...", "pending");
+
+    try {
+      const lookup = await fetchJson(`/api/location/lookup/${encodeURIComponent(zipCode)}`);
+      populateForm(buildZipLocation(lookup));
+      setMessage("ZIP lookup populated the editor. Review and save to apply.", "success");
+      getField("label")?.focus();
+    } catch (error) {
+      setMessage(error.message || "ZIP lookup failed.", "error");
+      zipField?.focus();
+    } finally {
+      state.isLookingUpZip = false;
+      if (lookupButton) {
+        lookupButton.disabled = false;
+      }
     }
   }
 
@@ -252,6 +304,7 @@
       populateForm(state.activeLocation);
       setPanelOpen(false);
     });
+    getElement("location-zip-lookup")?.addEventListener("click", lookupZipCode);
     getElement("location-editor-form")?.addEventListener("submit", saveLocation);
   }
 
@@ -271,6 +324,7 @@
 
   window.MOLECAST_LOCATION_EDITOR = {
     refresh: refresh,
+    lookupZipCode: lookupZipCode,
     getActiveLocation: function () {
       return state.activeLocation;
     },

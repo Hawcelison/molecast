@@ -12,22 +12,22 @@ the browser after starting Molecast:
 5. Add or activate a new alert with a new `canonical_id` or `id`; confirm that
    new banner auto-expands.
 6. With reduced motion enabled in the OS/browser, confirm new alerts do not
-   smooth-scroll and flashing does not start.
+   smooth-scroll.
 7. Confirm the banner container uses `aria-live="assertive"` for an
    Extreme/Severe Immediate warning, and `polite` for lower-priority alerts.
 8. Confirm dashboard polling still refreshes around the backend-provided
    interval, defaulting to 60 seconds if omitted.
 9. Confirm alert settings persist after reload:
-   alert audio, test audio, and disable flashing.
+   alert audio and test audio.
 10. Confirm audio does not play until `Alert audio` is enabled by a user click.
 11. Confirm local test alerts do not play audio unless both `Alert audio` and
    `Test audio` are enabled.
 12. Confirm `Silence active` stops audio for the active alert without hiding
    the banner.
-13. Confirm `Acknowledge active` stops audio and flashing for the active alert.
-14. Confirm active Severe/Extreme alerts flash the page background every two
-   seconds using the alert color, unless reduced motion or disable flashing is
-   enabled.
+13. Confirm `Acknowledge active` stops audio for the active alert.
+14. Confirm active Severe/Extreme alerts do not animate the page background;
+   severity remains visible through banners, colors, icons, audio, and map
+   polygons.
 15. Confirm sound profiles by event/source:
    Tornado Warning uses tornado siren; Blizzard/Hurricane/Extreme Wind-type
    warnings use standard alert; Civil/IPAWS test/future alerts use air raid;

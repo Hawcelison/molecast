@@ -342,6 +342,18 @@ table {
   width: 100%;
 }
 
+.location-editor__lookup {
+  align-content: end;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.location-editor__lookup-label {
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .location-editor__message {
   font-size: 0.86rem;
   font-weight: 750;
