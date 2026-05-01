@@ -78,6 +78,11 @@
   let geometryDrawPoints = [];
   let geometryEditEnabled = false;
   let suppressGeometryFieldInput = false;
+  let editorState = {
+    originalAlertId: null,
+    isNewAlert: false,
+    currentFormValues: null,
+  };
 
   function eventCategory(eventName) {
     const name = String(eventName || "").toLowerCase();
@@ -448,6 +453,9 @@
   }
 
   function cloneValue(value) {
+    if (value === null || value === undefined) {
+      return value;
+    }
     return JSON.parse(JSON.stringify(value));
   }
 
@@ -594,7 +602,13 @@
 
   function clearSelectedAlertForm() {
     selectedIndex = -1;
+    editorState = {
+      originalAlertId: null,
+      isNewAlert: false,
+      currentFormValues: null,
+    };
     byId("field-enabled").checked = false;
+    byId("field-id").readOnly = false;
     fillSelect("field-event", allEventValues(), "");
     ["id", "source", "severity", "urgency", "certainty", "headline", "description", "instruction", "areaDesc", "effective", "expires"].forEach(function (field) {
       byId(`field-${field}`).value = "";
@@ -987,21 +1001,22 @@
 
   function commitGeometryState(geometry, statusMessage, options) {
     const shouldSyncMarkers = !options || options.syncMarkers !== false;
-    validateGeometry(geometry);
-    setGeometryField(geometry, statusMessage);
+    const nextGeometry = cloneValue(geometry);
+    validateGeometry(nextGeometry);
+    setGeometryField(nextGeometry, statusMessage);
     if (payload && Array.isArray(payload.alerts) && selectedIndex >= 0 && payload.alerts[selectedIndex]) {
-      payload.alerts[selectedIndex].geometry = geometry;
+      payload.alerts[selectedIndex].geometry = cloneValue(nextGeometry);
     }
-    if (!geometry) {
+    if (!nextGeometry) {
       geometryDrawPoints = [];
       geometryEditEnabled = false;
       byId("edit-polygon").classList.remove("is-active");
     }
-    renderSelectedGeometryOnMap(geometry, false);
+    renderSelectedGeometryOnMap(nextGeometry, false);
     if (shouldSyncMarkers) {
-      syncVertexMarkers(geometry);
+      syncVertexMarkers(nextGeometry);
     }
-    if (geometry && validateGeometryForUi(geometry) && statusMessage) {
+    if (nextGeometry && validateGeometryForUi(nextGeometry) && statusMessage) {
       setGeometryStatus(statusMessage);
       setEditorMessage("Geometry updated", "success");
     }
@@ -1484,11 +1499,17 @@
 
   function renderSelectedAlertForm(alert) {
     alert.source = alert.source || "test";
+    editorState = {
+      originalAlertId: alert.id || null,
+      isNewAlert: false,
+      currentFormValues: cloneValue(alert),
+    };
     byId("field-enabled").checked = alert.enabled === true;
     fillSelect("field-event", allEventValues(), alert.event || "");
     ["id", "source", "severity", "urgency", "certainty", "headline", "description", "instruction", "areaDesc", "effective", "expires"].forEach(function (field) {
       byId(`field-${field}`).value = alert[field] || "";
     });
+    byId("field-id").readOnly = Boolean(editorState.originalAlertId);
     byId("field-geometry").value = prettyJson(alert.geometry);
     byId("field-affectedZones").value = Array.isArray(alert.affectedZones) ? alert.affectedZones.join("\n") : "";
     byId("field-geocode-ugc").value = Array.isArray(alert.geocode?.UGC) ? alert.geocode.UGC.join(", ") : "";
@@ -1507,9 +1528,9 @@
   }
 
   function readFormAlert() {
-    const id = byId("field-id").value.trim();
+    const submittedId = byId("field-id").value.trim();
     const event = byId("field-event").value.trim();
-    if (!id) {
+    if (!submittedId) {
       throw new Error("Missing required field: id");
     }
     if (!event) {
@@ -1546,6 +1567,10 @@
     if (!areaDesc) {
       setEditorMessage("Warning: areaDesc is blank; active alert matching may fall back to defaults.", "warning");
     }
+    const id = editorState.originalAlertId && !editorState.isNewAlert ? editorState.originalAlertId : submittedId;
+    if (byId("field-id").value.trim() !== id) {
+      byId("field-id").value = id;
+    }
     const updated = {
       enabled: byId("field-enabled").checked,
       id,
@@ -1568,6 +1593,7 @@
     if (hasRelativeTime) {
       updated.relative_time = cloneValue(existingAlert.relative_time);
     }
+    editorState.currentFormValues = cloneValue(updated);
     return updated;
   }
 
@@ -1576,13 +1602,20 @@
       throw new Error("Select an alert first.");
     }
     const updated = readFormAlert();
+    const targetIndex = editorState.originalAlertId && !editorState.isNewAlert
+      ? findAlertIndexById(editorState.originalAlertId)
+      : selectedIndex;
+    if (targetIndex < 0) {
+      throw new Error(`Selected alert no longer exists: ${editorState.originalAlertId || updated.id}`);
+    }
     const duplicate = currentAlerts().find(function (alert, index) {
-      return index !== selectedIndex && alert.id === updated.id;
+      return index !== targetIndex && alert.id === updated.id;
     });
     if (duplicate) {
       throw new Error(`Duplicate alert id: ${updated.id}`);
     }
-    currentAlerts()[selectedIndex] = updated;
+    selectedIndex = targetIndex;
+    currentAlerts()[targetIndex] = updated;
     renderTable();
     renderSelectedGeometryOnMap(updated.geometry);
     return updated;
@@ -1686,6 +1719,11 @@
     payload.alerts.push(makeEmptyAlert());
     selectedIndex = payload.alerts.length - 1;
     const addedId = payload.alerts[selectedIndex].id;
+    editorState = {
+      originalAlertId: addedId,
+      isNewAlert: true,
+      currentFormValues: cloneValue(payload.alerts[selectedIndex]),
+    };
     await saveAll({ applyForm: false, keepSelectedId: addedId });
   }
 
@@ -1788,30 +1826,7 @@
     if (selectedIndex >= 0 && currentAlerts()[selectedIndex]) {
       return;
     }
-    payload.alerts.push(makeEmptyAlert());
-    selectedIndex = payload.alerts.length - 1;
-    renderSelectedAlertForm(payload.alerts[selectedIndex]);
-  }
-
-  function setPresetBase(idPrefix, event, severity, urgency, certainty) {
-    const now = Date.now();
-    byId("field-id").value = `${idPrefix}-${formatUtc(new Date(now)).replace(/[^0-9]/g, "")}`;
-    byId("field-source").value = "test";
-    fillSelect("field-event", allEventValues(), event);
-    byId("field-severity").value = severity;
-    byId("field-urgency").value = urgency;
-    byId("field-certainty").value = certainty;
-    byId("field-areaDesc").value = targetAreaDesc();
-    byId("field-enabled").checked = false;
-    byId("field-effective").value = formatUtc(new Date(now - 60 * 60 * 1000));
-    byId("field-expires").value = formatUtc(new Date(now + 2 * 60 * 60 * 1000));
-    if (selectedIndex >= 0 && currentAlerts()[selectedIndex]) {
-      currentAlerts()[selectedIndex].relative_time = {
-        effective_minutes_from_now: -5,
-        expires_minutes_from_now: 90,
-      };
-    }
-    updateLocalTimes();
+    throw new Error("Select an alert first, or use Add alert to create a new alert explicitly.");
   }
 
   function applyPolygonPreset(kind) {
@@ -1819,58 +1834,24 @@
     const isStorm = kind === "storm";
     setAlertGeometryMode("polygon", { clearGeometry: false, updateStatus: false });
     setGeometryMode("rectangle");
-    setPresetBase(
-      isStorm ? "test-flash-flood-warning-polygon" : "test-severe-thunderstorm-warning-polygon",
-      isStorm ? "Flash Flood Warning" : "Severe Thunderstorm Warning",
-      "Severe",
-      "Immediate",
-      "Likely",
-    );
-    byId("field-headline").value = isStorm ? "TEST: Flash Flood Warning polygon" : "TEST: Severe Thunderstorm Warning polygon";
-    byId("field-description").value = isStorm
-      ? "Local polygon-mode flash flood warning test alert."
-      : "Local polygon-mode severe thunderstorm warning test alert.";
-    byId("field-instruction").value = isStorm ? "Move to higher ground." : "";
-    byId("field-affectedZones").value = "";
-    byId("field-geocode-ugc").value = "";
-    byId("field-geocode-same").value = "";
-    const parameters = isStorm
-      ? { flashFloodDamageThreat: ["CONSIDERABLE"], radarIndicated: ["true"] }
-      : { thunderstormDamageThreat: ["CONSIDERABLE"], windGust: ["70 MPH"], hailSize: ["1.75 IN"] };
-    byId("field-parameters").value = prettyJson(parameters);
-    renderParameterFields(parameters);
+    byId("geometry-half-width").value = isStorm ? "3" : "5";
     useTargetCenter();
-    setEditorMessage("Polygon preset applied", "success");
+    setEditorMessage("Sample polygon applied to current alert geometry only", "success");
   }
 
   function applyZonePreset(kind) {
     ensureEditableAlert();
     const isForecast = kind === "forecast";
-    const zoneUrl = isForecast ? defaultForecastZoneUrl() : defaultCountyZoneUrl();
-    const ugc = isForecast ? defaultForecastUgc() : defaultCountyUgc();
-    setPresetBase(
-      isForecast ? "test-forecast-zone-alert" : "test-county-zone-alert",
-      isForecast ? "Winter Weather Advisory" : "Wind Advisory",
-      "Minor",
-      "Expected",
-      "Likely",
-    );
-    byId("field-headline").value = isForecast ? "TEST: Forecast zone alert" : "TEST: County zone alert";
-    byId("field-description").value = isForecast
-      ? "Local forecast-zone test alert using affectedZones."
-      : "Local county-zone test alert using affectedZones.";
-    byId("field-instruction").value = "";
-    byId("field-affectedZones").value = zoneUrl;
-    byId("field-geocode-ugc").value = ugc;
-    byId("field-geocode-same").value = isForecast ? "" : defaultSame();
-    byId("field-parameters").value = prettyJson(
-      isForecast
-        ? { NWSheadline: ["FORECAST ZONE TEST USING AFFECTED ZONE GEOMETRY"] }
-        : { NWSheadline: ["COUNTY ZONE TEST USING AFFECTED ZONE GEOMETRY"] }
-    );
-    renderParameterFields(getParameterObjectFromRaw());
+    const affectedZones = cloneValue([isForecast ? defaultForecastZoneUrl() : defaultCountyZoneUrl()]);
+    const geocode = cloneValue({
+      UGC: [isForecast ? defaultForecastUgc() : defaultCountyUgc()],
+      SAME: isForecast ? [] : splitListInput(defaultSame()),
+    });
+    byId("field-affectedZones").value = affectedZones.join("\n");
+    byId("field-geocode-ugc").value = geocode.UGC.join(", ");
+    byId("field-geocode-same").value = geocode.SAME.join(", ");
     setAlertGeometryMode("zone");
-    setEditorMessage("Zone preset applied", "success");
+    setEditorMessage("Sample zone applied to current alert geometry fields only", "success");
   }
 
   function wireEvents() {
