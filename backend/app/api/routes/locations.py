@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -12,7 +12,12 @@ from app.schemas.location import (
     LocationStatus,
     ZipLookupResponse,
 )
+from app.schemas.location_resolver import LocationSearchResponse
 from app.services import location_service
+from app.services.location_resolver_service import (
+    InvalidLocationSearchTypeError,
+    get_location_resolver_service,
+)
 from app.services.zip_lookup_service import InvalidZipCodeError
 
 
@@ -33,6 +38,21 @@ def get_active_location(db: Session = Depends(get_db)):
 @router.get("/location/status", response_model=LocationStatus)
 def get_location_status(db: Session = Depends(get_db)):
     return location_service.get_location_status(db, settings)
+
+
+@router.get("/location/search", response_model=LocationSearchResponse)
+def search_locations(
+    q: str = Query(default=""),
+    limit: int = Query(default=8, ge=1),
+    search_type: str | None = Query(default=None, alias="type"),
+):
+    try:
+        return get_location_resolver_service().search(q, limit, search_type)
+    except InvalidLocationSearchTypeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/location/lookup/{zip_code}", response_model=ZipLookupResponse)
