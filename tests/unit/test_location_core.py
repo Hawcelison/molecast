@@ -18,6 +18,7 @@ from app.services.nws_points_service import (
     NwsPointsMetadata,
     parse_points_metadata,
 )
+from app.services.zip_lookup_service import InvalidZipCodeError
 
 
 def _settings():
@@ -155,6 +156,32 @@ def test_location_status_reports_missing_metadata(db) -> None:
     assert status["using_default"] is True
     assert status["nws_metadata_status"] == "missing"
     assert "metadata is missing" in status["warning"]
+
+
+def test_zip_lookup_returns_local_location_data() -> None:
+    lookup = locations_route.lookup_zip_code("49002")
+
+    assert lookup.zip_code == "49002"
+    assert lookup.city == "Portage"
+    assert lookup.state == "MI"
+    assert lookup.county == "Kalamazoo"
+    assert lookup.default_zoom == 9
+
+
+def test_zip_lookup_accepts_zip_plus_four() -> None:
+    lookup = location_service.lookup_zip_code("49002-1234")
+
+    assert lookup is not None
+    assert lookup.zip_code == "49002"
+
+
+def test_zip_lookup_rejects_invalid_format() -> None:
+    with pytest.raises(InvalidZipCodeError):
+        location_service.lookup_zip_code("49A02")
+
+
+def test_zip_lookup_returns_none_for_unknown_zip() -> None:
+    assert location_service.lookup_zip_code("99999") is None
 
 
 def test_schema_evolution_adds_missing_columns_without_dropping_rows() -> None:

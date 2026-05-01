@@ -7,13 +7,12 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="/static/js/modules/settings-store.js" defer></script>
-<script src="/static/js/modules/alerts-api.js" defer></script>
-<script src="/static/js/modules/alert-icons.js" defer></script>
-<script src="/static/js/modules/alert-flash.js" defer></script>
-<script src="/static/js/modules/alert-audio.js" defer></script>
-<script src="/static/js/modules/alert-banners.js?v=desktop-alert-tray-20260429" defer></script>
-<script src="/static/js/location-editor.js?v=active-location-editor-v1" defer></script>
+<script src="/static/js/modules/settings-store.js?v=alert-ui-20260501b" defer></script>
+<script src="/static/js/modules/alerts-api.js?v=alert-ui-20260501b" defer></script>
+<script src="/static/js/modules/alert-icons.js?v=alert-ui-20260501b" defer></script>
+<script src="/static/js/modules/alert-audio.js?v=alert-ui-20260501b" defer></script>
+<script src="/static/js/modules/alert-banners.js?v=alert-ui-20260501b" defer></script>
+<script src="/static/js/location-editor.js?v=zip-lookup-20260501b" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -70,6 +69,10 @@
             ZIP code
             <input id="location-zip-code" name="zip_code" type="text" inputmode="numeric" maxlength="10" autocomplete="postal-code">
           </label>
+          <div class="location-editor__lookup">
+            <span class="location-editor__lookup-label">ZIP lookup</span>
+            <button id="location-zip-lookup" class="location-panel__button" type="button">Lookup ZIP</button>
+          </div>
           <label>
             Default zoom
             <input id="location-default-zoom" name="default_zoom" type="number" step="1" min="3" max="14" required>

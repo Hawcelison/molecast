@@ -293,11 +293,6 @@
     return isAssertiveAlert(alert) || alertPriority(alert) >= HIGH_PRIORITY_THRESHOLD;
   }
 
-  function isSevereOrExtreme(alert) {
-    const severity = getString(alert && alert.severity, "").toLowerCase();
-    return severity === "extreme" || severity === "severe";
-  }
-
   function currentActionAlert(alerts) {
     return alerts.find(function (alert) {
       const id = canonicalId(alert);
@@ -352,19 +347,6 @@
         renderControls(lastRenderedAlerts);
       }
     );
-    const flashingLabel = makeCheckboxControl(
-      "alert-flashing-disabled",
-      "Disable flashing",
-      settings.flashingDisabled,
-      function (checked) {
-        global.MolecastSettingsStore.setFlashingDisabled(checked);
-        if (checked) {
-          global.MolecastAlertFlash.stop();
-        }
-        evaluateFlash(lastRenderedAlerts);
-        renderControls(lastRenderedAlerts);
-      }
-    );
 
     const silenceButton = createElement("button", "alert-control-button", isSilenced ? "Unsilence active" : "Silence active");
     silenceButton.type = "button";
@@ -379,7 +361,6 @@
         global.MolecastSettingsStore.silenceAlert(actionAlertId);
         global.MolecastAlertAudio.stop();
       }
-      evaluateFlash(lastRenderedAlerts);
       renderControls(lastRenderedAlerts);
     });
 
@@ -396,14 +377,12 @@
         global.MolecastSettingsStore.acknowledgeAlert(actionAlertId);
         global.MolecastAlertAudio.stop();
       }
-      evaluateFlash(lastRenderedAlerts);
       renderControls(lastRenderedAlerts);
     });
 
     container.replaceChildren(
       audioLabel,
       testAudioLabel,
-      flashingLabel,
       silenceButton,
       acknowledgeButton
     );
@@ -604,7 +583,6 @@
     renderControls(usableAlerts);
     if (usableAlerts.length === 0) {
       renderEmpty(container);
-      global.MolecastAlertFlash.stop();
       global.MolecastAlertAudio.stop();
       return [];
     }
@@ -643,10 +621,8 @@
       }
     }
 
-    // Read/unread is a tray visibility indicator only. Emergency audio and
-    // flashing stay tied to active alert severity plus explicit acknowledge,
-    // silence, and disable controls.
-    evaluateFlash(usableAlerts);
+    // Read/unread is a tray visibility indicator only. Emergency audio stays
+    // tied to active alert priority plus explicit acknowledge and silence controls.
 
     if (!usableAlerts.some(isHighPriority)) {
       global.MolecastAlertAudio.stop();
@@ -661,28 +637,7 @@
     if (container) {
       renderEmpty(container);
     }
-    global.MolecastAlertFlash.stop();
     global.MolecastAlertAudio.stop();
-  }
-
-  function evaluateFlash(alerts) {
-    const activeFlashAlert = alerts.find(function (alert) {
-      const id = canonicalId(alert);
-      return isSevereOrExtreme(alert) &&
-        !global.MolecastSettingsStore.isAlertAcknowledged(id);
-    });
-
-    if (!activeFlashAlert) {
-      global.MolecastAlertFlash.stop();
-      return;
-    }
-
-    if (global.MolecastSettingsStore.getSettings().flashingDisabled) {
-      global.MolecastAlertFlash.stop();
-      return;
-    }
-
-    global.MolecastAlertFlash.start(alertColor(activeFlashAlert));
   }
 
   global.MolecastAlertBanners = {

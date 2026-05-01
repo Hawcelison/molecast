@@ -5,6 +5,16 @@
     "state": "MI",
     "county": "Kalamazoo",
     "latitude": 42.2012,
-    "longitude": -85.58
+    "longitude": -85.58,
+    "default_zoom": 9
+  },
+  {
+    "zip_code": "49005",
+    "city": "Kalamazoo",
+    "state": "MI",
+    "county": "Kalamazoo",
+    "latitude": 42.2918,
+    "longitude": -85.5874,
+    "default_zoom": 9
   }
 ]

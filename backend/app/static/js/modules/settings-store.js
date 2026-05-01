@@ -3,7 +3,7 @@
   const DEFAULT_SETTINGS = Object.freeze({
     alertAudioEnabled: false,
     testAudioEnabled: false,
-    flashingDisabled: false,
+    flashingDisabled: true,
     silencedAlertIds: [],
     acknowledgedAlertIds: [],
     readAlertIds: [],
@@ -31,7 +31,7 @@
     return {
       alertAudioEnabled: Boolean(settings.alertAudioEnabled),
       testAudioEnabled: Boolean(settings.testAudioEnabled),
-      flashingDisabled: Boolean(settings.flashingDisabled),
+      flashingDisabled: true,
       silencedAlertIds: normalizeIdArray(settings.silencedAlertIds),
       acknowledgedAlertIds: normalizeIdArray(settings.acknowledgedAlertIds),
       readAlertIds: normalizeIdArray(settings.readAlertIds).slice(-MAX_READ_ALERT_IDS),
@@ -76,8 +76,8 @@
     return updateSettings({ testAudioEnabled: Boolean(enabled) });
   }
 
-  function setFlashingDisabled(disabled) {
-    return updateSettings({ flashingDisabled: Boolean(disabled) });
+  function setFlashingDisabled(_disabled) {
+    return updateSettings({ flashingDisabled: true });
   }
 
   function hasId(collectionName, alertId) {

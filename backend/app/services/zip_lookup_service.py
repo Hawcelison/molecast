@@ -23,6 +23,7 @@ class ZipCodeLookupResult(BaseModel):
     county: str
     latitude: float
     longitude: float
+    default_zoom: int = Field(default=9, ge=0, le=22)
 
 
 class ZipCodeProvider(Protocol):
