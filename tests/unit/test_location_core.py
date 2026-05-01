@@ -11,7 +11,7 @@ from app.api.routes import locations as locations_route
 from app.database import Base
 from app.db_init import ensure_location_schema
 from app.models.location import Location
-from app.schemas.location import ActiveLocationDirectUpdate
+from app.schemas.location import ActiveLocationDirectUpdate, LocationCreate
 from app.services import location_service
 from app.services.nws_points_service import (
     NwsPointsFetchError,
@@ -147,6 +147,28 @@ def test_invalid_active_location_payloads_rejected() -> None:
         ActiveLocationDirectUpdate(latitude=42, longitude=-181)
     with pytest.raises(ValidationError):
         ActiveLocationDirectUpdate(latitude=42, longitude=-85, default_zoom=23)
+    with pytest.raises(ValidationError):
+        ActiveLocationDirectUpdate(latitude=42, longitude=-85, zip_code="49A02")
+
+
+def test_active_location_payload_trims_zip_code_whitespace() -> None:
+    payload = ActiveLocationDirectUpdate(latitude=42, longitude=-85, zip_code=" 49002\t")
+
+    assert payload.zip_code == "49002"
+
+
+def test_location_create_trims_zip_code_whitespace() -> None:
+    payload = LocationCreate(
+        label="Portage, MI 49002",
+        city="Portage",
+        state="MI",
+        county="Kalamazoo",
+        zip_code="\n49002 ",
+        latitude=42.2012,
+        longitude=-85.58,
+    )
+
+    assert payload.zip_code == "49002"
 
 
 def test_location_status_reports_missing_metadata(db) -> None:
