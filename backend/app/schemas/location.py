@@ -1,6 +1,14 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+def _trim_zip_code(value):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    return value.strip()
 
 
 class LocationBase(BaseModel):
@@ -14,6 +22,11 @@ class LocationBase(BaseModel):
     longitude: float = Field(ge=-180, le=180)
     timezone: str | None = Field(default=None, min_length=1, max_length=80)
     default_zoom: int = Field(default=9, ge=0, le=22)
+
+    @field_validator("zip_code", mode="before")
+    @classmethod
+    def trim_zip_code(cls, value: str) -> str:
+        return _trim_zip_code(value) or ""
 
 
 class LocationCreate(LocationBase):
@@ -35,6 +48,11 @@ class ActiveLocationDirectUpdate(BaseModel):
     state: str | None = Field(default=None, min_length=2, max_length=2)
     timezone: str | None = Field(default=None, min_length=1, max_length=80)
     default_zoom: int | None = Field(default=None, ge=0, le=22)
+
+    @field_validator("zip_code", mode="before")
+    @classmethod
+    def trim_zip_code(cls, value: str | None) -> str | None:
+        return _trim_zip_code(value)
 
     @model_validator(mode="after")
     def normalize_state(self):
