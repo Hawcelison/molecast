@@ -12,7 +12,7 @@
 <script src="/static/js/modules/alert-icons.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-audio.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-banners.js?v=alert-ui-20260501b" defer></script>
-<script src="/static/js/location-editor.js?v=zip-lookup-20260501b" defer></script>
+<script src="/static/js/location-editor.js?v=location-search-20260501b" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -36,6 +36,27 @@
     </div>
     <div id="location-editor-panel" class="location-editor" hidden>
       <form id="location-editor-form" class="location-editor__form">
+        <div class="location-editor__search">
+          <label for="location-search">
+            Search ZIP or city
+            <input
+              id="location-search"
+              name="location_search"
+              type="search"
+              maxlength="120"
+              autocomplete="off"
+              placeholder="Type ZIP, city, or city/state"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="location-search-results"
+              aria-describedby="location-search-status"
+            >
+          </label>
+          <p id="location-search-status" class="location-editor__search-status" role="status" aria-live="polite">Select a location, then review and save.</p>
+          <div id="location-search-results" class="location-editor__suggestions" role="listbox" hidden></div>
+          <p id="location-selected-suggestion" class="location-editor__selected" hidden></p>
+        </div>
         <div class="location-editor__grid">
           <label>
             Label
