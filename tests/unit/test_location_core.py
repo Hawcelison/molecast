@@ -210,11 +210,20 @@ def test_location_status_reports_missing_metadata(db) -> None:
 def test_zip_lookup_returns_local_location_data() -> None:
     lookup = locations_route.lookup_zip_code("49002")
 
+    assert lookup.zip == "49002"
     assert lookup.zip_code == "49002"
     assert lookup.city == "Portage"
     assert lookup.state == "MI"
     assert lookup.county == "Kalamazoo"
     assert lookup.default_zoom == 9
+
+
+def test_legacy_zip_lookup_route_returns_local_location_data() -> None:
+    lookup = locations_route.lookup_zip_code_legacy("49005")
+
+    assert lookup.zip == "49005"
+    assert lookup.zip_code == "49005"
+    assert lookup.city == "Kalamazoo"
 
 
 def test_zip_lookup_accepts_zip_plus_four() -> None:

@@ -257,14 +257,15 @@
   }
 
   function buildZipLocation(lookup) {
-    const label = `${lookup.city}, ${lookup.state} ${lookup.zip_code}`.trim();
+    const zipCode = lookup.zip_code || lookup.zip || "";
+    const label = `${lookup.city}, ${lookup.state} ${zipCode}`.trim();
     return {
       label: label,
       name: label,
       city: lookup.city,
       county: lookup.county,
       state: lookup.state,
-      zip_code: lookup.zip_code,
+      zip_code: zipCode,
       latitude: lookup.latitude,
       longitude: lookup.longitude,
       default_zoom: lookup.default_zoom || 9,
@@ -920,7 +921,7 @@
     setMessage("Looking up ZIP code...", "pending");
 
     try {
-      const lookup = await fetchJson(`/api/location/lookup/${encodeURIComponent(zipCode)}`);
+      const lookup = await fetchJson(`/api/location/zip/${encodeURIComponent(zipCode)}`);
       const location = buildZipLocation(lookup);
       populateForm(location);
       clearSuggestions();
