@@ -86,6 +86,27 @@ class Settings(BaseSettings):
         default=constants.NWS_USER_AGENT,
         validation_alias="NWS_USER_AGENT",
     )
+    geocoder_provider: str = Field(
+        default=constants.GEOCODER_PROVIDER,
+        validation_alias="GEOCODER_PROVIDER",
+    )
+    census_geocoder_base_url: str = Field(
+        default=constants.CENSUS_GEOCODER_BASE_URL,
+        validation_alias="CENSUS_GEOCODER_BASE_URL",
+    )
+    census_geocoder_benchmark: str = Field(
+        default=constants.CENSUS_GEOCODER_BENCHMARK,
+        validation_alias="CENSUS_GEOCODER_BENCHMARK",
+    )
+    geocoder_timeout_seconds: int = Field(
+        default=constants.GEOCODER_TIMEOUT_SECONDS,
+        validation_alias="GEOCODER_TIMEOUT_SECONDS",
+        gt=0,
+    )
+    geocoder_user_agent: str = Field(
+        default=constants.GEOCODER_USER_AGENT,
+        validation_alias="GEOCODER_USER_AGENT",
+    )
     test_alerts_file: Path = Field(
         default=Path(constants.TEST_ALERTS_FILE),
         validation_alias="TEST_ALERTS_FILE",
