@@ -12,7 +12,7 @@
 <script src="/static/js/modules/alert-icons.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-audio.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-banners.js?v=alert-ui-20260501b" defer></script>
-<script src="/static/js/location-editor.js?v=active-location-marker-20260501" defer></script>
+<script src="/static/js/location-editor.js?v=location-pin-refinement-20260501" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -57,6 +57,10 @@
           <div id="location-search-results" class="location-editor__suggestions" role="listbox" hidden></div>
           <p id="location-selected-suggestion" class="location-editor__selected" hidden></p>
           <div id="location-nws-preview" class="location-editor__nws-preview" role="status" aria-live="polite" hidden></div>
+          <div class="location-editor__pin-controls" aria-label="Map pin refinement">
+            <button id="location-place-pin" class="location-panel__button" type="button" aria-pressed="false">Place pin on map</button>
+            <button id="location-use-map-center" class="location-panel__button" type="button">Use map center</button>
+          </div>
           <p id="location-preview-pin-status" class="location-editor__pin-status" role="status" aria-live="polite" hidden></p>
         </div>
         <div class="location-editor__grid">

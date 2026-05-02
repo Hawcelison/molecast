@@ -424,6 +424,23 @@ table {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.location-editor__pin-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.location-editor__pin-controls .location-panel__button {
+  width: auto;
+}
+
+.location-editor__pin-controls .location-panel__button[data-active="true"],
+.location-editor__pin-controls .location-panel__button[aria-pressed="true"] {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
 .location-editor__suggestions {
   background: #ffffff;
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
