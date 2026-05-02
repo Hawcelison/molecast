@@ -11,6 +11,7 @@ from app.geocoders.base import (
     AddressGeocodeCandidate,
     AddressGeocodeRequest,
     AddressGeocodeResponse,
+    AddressGeocoderUnavailable,
 )
 from app.repositories.location_lookup_repository import LocationLookupRepository
 from app.services.location_resolver_service import LocationResolverService
@@ -18,11 +19,14 @@ from scripts.import_location_lookup import import_location_lookup
 
 
 class FakeAddressLookupService:
-    def __init__(self) -> None:
+    def __init__(self, should_fail: bool = False) -> None:
         self.calls: list[AddressGeocodeRequest] = []
+        self.should_fail = should_fail
 
     def lookup(self, request: AddressGeocodeRequest) -> AddressGeocodeResponse:
         self.calls.append(request)
+        if self.should_fail:
+            raise AddressGeocoderUnavailable("Address provider unavailable.")
         return AddressGeocodeResponse(
             query=request.address or "",
             provider="fake",
@@ -136,6 +140,35 @@ def test_search_service_skips_address_provider_for_city_like_query() -> None:
 
     assert response.count == 0
     assert address_service.calls == []
+
+
+@pytest.mark.parametrize("query", ["4222", "42222"])
+def test_search_service_does_not_use_address_provider_for_short_numeric_queries(query: str) -> None:
+    address_service = FakeAddressLookupService()
+    service = LocationResolverService(
+        LocationLookupRepository(Path("backend/app/data/location_lookup.sqlite3")),
+        address_service=address_service,
+    )
+
+    response = service.search(query, limit=8, types="zip,city,address")
+
+    assert response.warnings == []
+    assert address_service.calls == []
+
+
+def test_search_service_reports_address_provider_warning_without_breaking_local_results() -> None:
+    address_service = FakeAddressLookupService(should_fail=True)
+    service = LocationResolverService(
+        LocationLookupRepository(Path("backend/app/data/location_lookup.sqlite3")),
+        address_service=address_service,
+    )
+
+    response = service.search("49002 4222 Fireside", limit=8, types="zip,address")
+
+    assert response.count >= 1
+    assert response.results[0].kind == "zip"
+    assert response.warnings == ["address_search_unavailable"]
+    assert address_service.calls[0].address == "49002 4222 Fireside"
 
 
 def test_search_endpoint_limit_is_applied() -> None:

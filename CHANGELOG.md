@@ -2,6 +2,14 @@
 
 Molecast release notes will be tracked here.
 
+## 0.3.1 - 2026-05-02
+
+- Improved active location autocomplete status feedback while searches are running.
+- Added address-provider searching and longer-than-usual status messages for slower address lookups.
+- Added compact ZIP, City, and Address type labels to autocomplete suggestions.
+- Added clearer no-results and non-blocking address-provider unavailable states.
+- Preserved explicit Save behavior and existing ZIP lookup, city search, and address search flows.
+
 ## 0.3.0 - 2026-05-02
 
 - Added ZIP, city, and address autocomplete to the active location editor.

@@ -375,6 +375,10 @@ table {
   color: color-mix(in srgb, currentColor 72%, transparent);
 }
 
+.location-editor__search-status[data-state="warning"] {
+  color: #b45309;
+}
+
 .location-editor__pin-status[data-state="success"] {
   color: #166534;
 }
@@ -481,9 +485,28 @@ table {
 }
 
 .location-editor__suggestion-primary {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
   font-size: 0.9rem;
   font-weight: 850;
   line-height: 1.25;
+}
+
+.location-editor__suggestion-type {
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 4px;
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 0.16rem 0.28rem;
+  text-transform: uppercase;
+}
+
+.location-editor__suggestion-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .location-editor__suggestion-secondary {

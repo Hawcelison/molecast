@@ -35,6 +35,7 @@ DEFAULT_SEARCH_LIMIT = 8
 MAX_SEARCH_LIMIT = 20
 VALID_SEARCH_TYPES = {"zip", "city", "address"}
 OFFICE_MAPPING_PATH = settings.app_dir / "data" / "nws_offices.json"
+ADDRESS_SEARCH_UNAVAILABLE_WARNING = "address_search_unavailable"
 
 
 class InvalidLocationSearchTypeError(ValueError):
@@ -73,6 +74,7 @@ class LocationResolverService:
 
         results: list[LocationSearchSuggestion] = []
         seen_refs: set[str] = set()
+        warnings: list[str] = []
 
         if "zip" in search_types:
             for record in self.repository.search_zip_prefix(_zip_query(normalized_query), capped_limit):
@@ -96,6 +98,7 @@ class LocationResolverService:
                 )
             except (AddressGeocoderValidationError, AddressGeocoderError):
                 address_response = None
+                warnings.append(ADDRESS_SEARCH_UNAVAILABLE_WARNING)
 
             if address_response:
                 for candidate in address_response.candidates:
@@ -105,6 +108,7 @@ class LocationResolverService:
             query=normalized_query,
             count=len(results),
             results=results,
+            warnings=warnings,
         )
 
     def preview_nws_point(self, latitude: float, longitude: float) -> NwsPointPreviewResponse:
@@ -306,6 +310,9 @@ def _append_unique(
 
 
 def _zip_query(query: str) -> str:
+    leading_digits = re.match(r"^\d{2,5}", query)
+    if leading_digits:
+        return leading_digits.group(0)[:5]
     return query[:5] if query.isdigit() else query
 
 

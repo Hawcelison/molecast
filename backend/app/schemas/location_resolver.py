@@ -23,6 +23,7 @@ class LocationSearchResponse(BaseModel):
     query: str
     count: int
     results: list[LocationSearchSuggestion]
+    warnings: list[str] = Field(default_factory=list)
 
 
 class NwsPointPreviewRequest(BaseModel):

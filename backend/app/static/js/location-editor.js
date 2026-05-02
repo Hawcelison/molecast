@@ -6,6 +6,7 @@
     isSaving: false,
     isLookingUpZip: false,
     searchTimer: null,
+    searchSlowTimer: null,
     searchRequestId: 0,
     searchAbortController: null,
     searchResults: [],
@@ -126,6 +127,13 @@
     if (state.searchTimer) {
       window.clearTimeout(state.searchTimer);
       state.searchTimer = null;
+    }
+  }
+
+  function clearSearchSlowTimer() {
+    if (state.searchSlowTimer) {
+      window.clearTimeout(state.searchSlowTimer);
+      state.searchSlowTimer = null;
     }
   }
 
@@ -302,6 +310,22 @@
       .replace(/\b\w/g, function (letter) {
         return letter.toUpperCase();
       });
+  }
+
+  function suggestionKindLabel(suggestion) {
+    if (suggestion.kind === "zip") {
+      return "ZIP";
+    }
+    return readableToken(suggestion.kind);
+  }
+
+  function isAddressSearchLikely(query) {
+    const value = String(query || "").trim();
+    return value.length >= 6 && /\d+\s+\S+/.test(value) && /\d/.test(value) && /[A-Za-z]/.test(value);
+  }
+
+  function hasAddressSearchWarning(payload) {
+    return Array.isArray(payload?.warnings) && payload.warnings.includes("address_search_unavailable");
   }
 
   function suggestionSecondaryText(suggestion) {
@@ -707,7 +731,15 @@
 
       const primary = document.createElement("span");
       primary.className = "location-editor__suggestion-primary";
-      primary.textContent = suggestion.label || "Unnamed location";
+
+      const type = document.createElement("span");
+      type.className = "location-editor__suggestion-type";
+      type.textContent = suggestionKindLabel(suggestion);
+
+      const label = document.createElement("span");
+      label.className = "location-editor__suggestion-label";
+      label.textContent = suggestion.label || "Unnamed location";
+      primary.append(type, label);
 
       const secondary = document.createElement("span");
       secondary.className = "location-editor__suggestion-secondary";
@@ -778,8 +810,17 @@
 
   async function searchLocations(query, requestId) {
     abortPendingSearch();
+    clearSearchSlowTimer();
     state.searchAbortController = new AbortController();
-    setSearchStatus("Searching locations...", "pending");
+    const isAddressSearch = isAddressSearchLikely(query);
+    setSearchStatus(isAddressSearch ? "Searching address provider..." : "Searching locations...", "pending");
+    if (isAddressSearch) {
+      state.searchSlowTimer = window.setTimeout(function () {
+        if (requestId === state.searchRequestId) {
+          setSearchStatus("Address search is taking longer than usual...", "pending");
+        }
+      }, 2500);
+    }
 
     try {
       const payload = await fetchJson(
@@ -789,14 +830,25 @@
       if (requestId !== state.searchRequestId) {
         return;
       }
+      clearSearchSlowTimer();
       const suggestions = Array.isArray(payload?.results) ? payload.results : [];
       if (suggestions.length === 0) {
         clearSuggestions();
-        setSearchStatus("No matching locations found", "empty");
+        setSearchStatus(
+          hasAddressSearchWarning(payload)
+            ? "Address search is unavailable right now. ZIP and city search may still work."
+            : "No matching locations found.",
+          hasAddressSearchWarning(payload) ? "warning" : "empty",
+        );
         return;
       }
       renderSuggestions(suggestions);
-      setSearchStatus("Select a location, then review and save.", "");
+      setSearchStatus(
+        hasAddressSearchWarning(payload)
+          ? "Address search is unavailable right now. ZIP and city search may still work."
+          : "Select a location, then review and save.",
+        hasAddressSearchWarning(payload) ? "warning" : "",
+      );
     } catch (error) {
       if (error.name === "AbortError" || requestId !== state.searchRequestId) {
         return;
@@ -805,6 +857,7 @@
       setSearchStatus(error.message || "Location search failed.", "error");
     } finally {
       if (requestId === state.searchRequestId) {
+        clearSearchSlowTimer();
         state.searchAbortController = null;
       }
     }
@@ -812,6 +865,7 @@
 
   function queueLocationSearch() {
     clearSearchTimer();
+    clearSearchSlowTimer();
     abortPendingSearch();
     state.searchRequestId += 1;
     const requestId = state.searchRequestId;

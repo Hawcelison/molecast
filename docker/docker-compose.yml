@@ -11,7 +11,7 @@ services:
       - "5000:5000"
     environment:
       APP_NAME: ${APP_NAME:-Molecast}
-      APP_VERSION: ${APP_VERSION:-0.3.0}
+      APP_VERSION: ${APP_VERSION:-0.3.1}
       APP_ENV: ${APP_ENV:-local}
       DATA_DIR: ${DATA_DIR:-/app/data}
       DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/molecast.sqlite3}
