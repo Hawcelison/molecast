@@ -18,7 +18,14 @@
     previewMarker: null,
     previewMarkerRetryTimer: null,
     previewMarkerRetryCount: 0,
+    isPlacingPin: false,
+    mapPlacementClickHandler: null,
+    mapPlacementKeyHandler: null,
+    mapPlacementMap: null,
   };
+
+  const PREVIEW_ONLY_TEXT = "Preview only — click Save to make this active.";
+  const DRAG_PREVIEW_TEXT = "Drag the preview pin to refine.";
 
   const fieldNames = [
     "label",
@@ -92,6 +99,19 @@
     status.hidden = !text;
   }
 
+  function previewPinStatusText(prefix) {
+    return [prefix, PREVIEW_ONLY_TEXT, DRAG_PREVIEW_TEXT].filter(Boolean).join(" ");
+  }
+
+  function setPlacePinButtonActive(isActive) {
+    const button = getElement("location-place-pin");
+    if (!button) {
+      return;
+    }
+    button.setAttribute("aria-pressed", String(isActive));
+    button.dataset.active = isActive ? "true" : "false";
+  }
+
   function setSearchExpanded(isExpanded) {
     const input = getSearchInput();
     if (input) {
@@ -158,6 +178,9 @@
     if (button) {
       button.setAttribute("aria-expanded", String(isOpen));
       button.textContent = isOpen ? "Close editor" : "Edit location";
+    }
+    if (!isOpen) {
+      stopMapPinPlacement({ preserveStatus: true });
     }
     if (isOpen) {
       populateForm(state.activeLocation);
@@ -416,15 +439,31 @@
     });
   }
 
+  function applyPreviewCoordinate(latitude, longitude, options) {
+    const previewOptions = options || {};
+    updateLatLonFields(latitude, longitude);
+    const markerPlaced = placePreviewMarker(latitude, longitude, {
+      shouldFocus: previewOptions.shouldFocus !== false,
+    });
+    requestNwsPreview(latitude, longitude);
+    if (markerPlaced) {
+      setPreviewPinStatus(previewOptions.statusText || previewPinStatusText(), "success");
+    }
+    if (previewOptions.message) {
+      setMessage(previewOptions.message, previewOptions.messageType || "success");
+    }
+  }
+
   function handlePreviewMarkerDragEnd() {
     if (!state.previewMarker || typeof state.previewMarker.getLngLat !== "function") {
       return;
     }
     const lngLat = state.previewMarker.getLngLat();
-    updateLatLonFields(lngLat.lat, lngLat.lng);
-    setPreviewPinStatus("Preview Location - not saved yet. Drag pin to adjust location; save to make active.", "success");
-    setMessage("Preview pin moved. Review and save to apply.", "success");
-    requestNwsPreview(lngLat.lat, lngLat.lng);
+    applyPreviewCoordinate(lngLat.lat, lngLat.lng, {
+      shouldFocus: false,
+      statusText: previewPinStatusText(),
+      message: "Preview pin moved. Review and save to apply.",
+    });
   }
 
   function scheduleActiveMarkerRetry() {
@@ -487,14 +526,14 @@
     if (!validCoordinate(latitude, longitude)) {
       clearPreviewMarker();
       setPreviewPinStatus("Preview pin unavailable for this selection.", "warning");
-      return;
+      return false;
     }
 
     const map = window.MOLECAST_MAP;
     if (!map || !window.mapboxgl || typeof window.mapboxgl.Marker !== "function") {
-      setPreviewPinStatus("Preview Location - not saved yet. Waiting for the map.", "pending");
+      setPreviewPinStatus(`${PREVIEW_ONLY_TEXT} Waiting for the map.`, "pending");
       schedulePreviewMarkerRetry(latitude, longitude);
-      return;
+      return false;
     }
 
     state.previewMarkerRetryCount = 0;
@@ -508,10 +547,114 @@
     }
 
     state.previewMarker.setLngLat([Number(longitude), Number(latitude)]).addTo(map);
-    setPreviewPinStatus("Preview Location - not saved yet. Drag pin to adjust location; save to make active.", "success");
+    setPreviewPinStatus(previewPinStatusText(), "success");
     if (shouldFocus) {
       focusPreviewLocation(latitude, longitude);
     }
+    return true;
+  }
+
+  function setMapPlacementCursor(map, cursor) {
+    if (!map || typeof map.getCanvas !== "function") {
+      return;
+    }
+    const canvas = map.getCanvas();
+    if (canvas) {
+      canvas.style.cursor = cursor || "";
+    }
+  }
+
+  function stopMapPinPlacement(options) {
+    const settings = options || {};
+    const map = state.mapPlacementMap || window.MOLECAST_MAP;
+    if (map && state.mapPlacementClickHandler && typeof map.off === "function") {
+      map.off("click", state.mapPlacementClickHandler);
+    }
+    if (state.mapPlacementKeyHandler) {
+      document.removeEventListener("keydown", state.mapPlacementKeyHandler);
+    }
+
+    setMapPlacementCursor(map, "");
+    state.isPlacingPin = false;
+    state.mapPlacementClickHandler = null;
+    state.mapPlacementKeyHandler = null;
+    state.mapPlacementMap = null;
+    setPlacePinButtonActive(false);
+
+    if (!settings.preserveStatus) {
+      setPreviewPinStatus(settings.statusText || "", settings.statusType || "");
+    }
+  }
+
+  function startMapPinPlacement() {
+    if (state.isPlacingPin) {
+      stopMapPinPlacement({
+        statusText: state.previewMarker ? previewPinStatusText() : "",
+        statusType: state.previewMarker ? "success" : "",
+      });
+      return;
+    }
+
+    const map = window.MOLECAST_MAP;
+    if (!map || typeof map.on !== "function") {
+      setPreviewPinStatus("Map is still loading. Try placing the pin again in a moment.", "pending");
+      return;
+    }
+
+    stopMapPinPlacement({ preserveStatus: true });
+    state.isPlacingPin = true;
+    state.mapPlacementMap = map;
+    state.mapPlacementClickHandler = function (event) {
+      const lngLat = event && event.lngLat;
+      if (!lngLat || !validCoordinate(lngLat.lat, lngLat.lng)) {
+        return;
+      }
+      if (event.originalEvent) {
+        event.originalEvent.preventDefault();
+        event.originalEvent.stopPropagation();
+      }
+      applyPreviewCoordinate(lngLat.lat, lngLat.lng, {
+        shouldFocus: false,
+        statusText: previewPinStatusText(),
+        message: "Preview pin placed. Review and save to apply.",
+      });
+      stopMapPinPlacement({ preserveStatus: true });
+    };
+    state.mapPlacementKeyHandler = function (event) {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      stopMapPinPlacement({
+        statusText: state.previewMarker ? previewPinStatusText() : "",
+        statusType: state.previewMarker ? "success" : "",
+      });
+    };
+
+    map.on("click", state.mapPlacementClickHandler);
+    document.addEventListener("keydown", state.mapPlacementKeyHandler);
+    setMapPlacementCursor(map, "crosshair");
+    setPlacePinButtonActive(true);
+    setPreviewPinStatus(`Click the map to place the preview pin. ${PREVIEW_ONLY_TEXT}`, "pending");
+  }
+
+  function useMapCenterForPreview() {
+    const map = window.MOLECAST_MAP;
+    if (!map || typeof map.getCenter !== "function") {
+      setPreviewPinStatus("Map is still loading. Try using map center again in a moment.", "pending");
+      return;
+    }
+    const center = map.getCenter();
+    if (!center || !validCoordinate(center.lat, center.lng)) {
+      setPreviewPinStatus("Map center is unavailable.", "warning");
+      return;
+    }
+    stopMapPinPlacement({ preserveStatus: true });
+    applyPreviewCoordinate(center.lat, center.lng, {
+      shouldFocus: false,
+      statusText: previewPinStatusText(),
+      message: "Map center selected. Review and save to apply.",
+    });
   }
 
   function renderNwsPreview(previewPayload) {
@@ -606,8 +749,10 @@
     }
     clearSuggestions();
     setSelectedSuggestionPreview(suggestion);
-    requestNwsPreview(suggestion.latitude, suggestion.longitude);
-    placePreviewMarker(suggestion.latitude, suggestion.longitude);
+    stopMapPinPlacement({ preserveStatus: true });
+    applyPreviewCoordinate(suggestion.latitude, suggestion.longitude, {
+      statusText: previewPinStatusText(),
+    });
     setSearchStatus("Select a location, then review and save.", "success");
     setMessage("Search populated the editor. Preview only; review and save to apply.", "success");
     getField("label")?.focus();
@@ -669,6 +814,7 @@
     const requestId = state.searchRequestId;
     const query = getSearchInput()?.value.trim() || "";
 
+    stopMapPinPlacement({ preserveStatus: true });
     setSelectedSuggestionPreview(null);
     clearNwsPreview();
     clearPreviewMarker();
@@ -779,8 +925,10 @@
       populateForm(location);
       clearSuggestions();
       setSelectedSuggestionPreview(null);
-      requestNwsPreview(location.latitude, location.longitude);
-      placePreviewMarker(location.latitude, location.longitude);
+      stopMapPinPlacement({ preserveStatus: true });
+      applyPreviewCoordinate(location.latitude, location.longitude, {
+        statusText: previewPinStatusText(),
+      });
       setSearchStatus("Select a location, then review and save.", "");
       setMessage("ZIP lookup populated the editor. Preview only; review and save to apply.", "success");
       getField("label")?.focus();
@@ -823,6 +971,7 @@
     if (saveButton) {
       saveButton.disabled = true;
     }
+    stopMapPinPlacement({ preserveStatus: true });
     setMessage("Saving location...", "pending");
 
     try {
@@ -863,6 +1012,7 @@
     });
     getElement("location-editor-cancel")?.addEventListener("click", function () {
       setMessage("", "");
+      stopMapPinPlacement({ preserveStatus: true });
       clearSearchTimer();
       abortPendingSearch();
       clearNwsPreview();
@@ -878,6 +1028,8 @@
       setPanelOpen(false);
     });
     getElement("location-zip-lookup")?.addEventListener("click", lookupZipCode);
+    getElement("location-place-pin")?.addEventListener("click", startMapPinPlacement);
+    getElement("location-use-map-center")?.addEventListener("click", useMapCenterForPreview);
     getElement("location-editor-form")?.addEventListener("submit", saveLocation);
     getSearchInput()?.addEventListener("input", queueLocationSearch);
     getSearchInput()?.addEventListener("keydown", function (event) {
