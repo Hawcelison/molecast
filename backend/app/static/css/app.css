@@ -374,6 +374,43 @@ table {
   color: color-mix(in srgb, currentColor 72%, transparent);
 }
 
+.location-editor__nws-preview {
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 6px;
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 0.22rem;
+  line-height: 1.3;
+  padding: 0.55rem 0.65rem;
+}
+
+.location-editor__nws-preview[hidden] {
+  display: none;
+}
+
+.location-editor__nws-preview[data-state="pending"] {
+  color: #1d4ed8;
+}
+
+.location-editor__nws-preview[data-state="ok"] {
+  color: #166534;
+}
+
+.location-editor__nws-preview[data-state="warning"] {
+  color: #b45309;
+}
+
+.location-editor__nws-preview-title {
+  font-weight: 850;
+}
+
+.location-editor__nws-preview-grid {
+  display: grid;
+  gap: 0.18rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .location-editor__suggestions {
   background: #ffffff;
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
@@ -473,6 +510,10 @@ table {
   }
 
   .location-editor__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .location-editor__nws-preview-grid {
     grid-template-columns: 1fr;
   }
 }

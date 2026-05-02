@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -11,13 +13,19 @@ from app.repositories.location_lookup_repository import (
     LocationLookupRepository,
     ZipLocationRecord,
 )
-from app.schemas.location_resolver import LocationSearchResponse, LocationSearchSuggestion
+from app.schemas.location_resolver import (
+    LocationSearchResponse,
+    LocationSearchSuggestion,
+    NwsPointPreviewResponse,
+)
+from app.services.nws_points_service import NwsPointsService, nws_points_service
 
 
 MIN_SEARCH_QUERY_LENGTH = 2
 DEFAULT_SEARCH_LIMIT = 8
 MAX_SEARCH_LIMIT = 20
 VALID_SEARCH_TYPES = {"zip", "city"}
+OFFICE_MAPPING_PATH = settings.app_dir / "data" / "nws_offices.json"
 
 
 class InvalidLocationSearchTypeError(ValueError):
@@ -31,8 +39,13 @@ class ParsedCityQuery:
 
 
 class LocationResolverService:
-    def __init__(self, repository: LocationLookupRepository) -> None:
+    def __init__(
+        self,
+        repository: LocationLookupRepository,
+        points_service: NwsPointsService = nws_points_service,
+    ) -> None:
         self.repository = repository
+        self.points_service = points_service
 
     def search(
         self,
@@ -68,6 +81,28 @@ class LocationResolverService:
             query=normalized_query,
             count=len(results),
             results=results,
+        )
+
+    def preview_nws_point(self, latitude: float, longitude: float) -> NwsPointPreviewResponse:
+        metadata = self.points_service.fetch_points_metadata(latitude, longitude)
+        office = normalize_office_id(metadata.nws_office)
+        office_code = office_code_for(office)
+        office_name = office_name_for(office)
+
+        return NwsPointPreviewResponse(
+            latitude=latitude,
+            longitude=longitude,
+            nws_office=office,
+            nws_office_code=office_code,
+            nws_office_name=office_name,
+            nws_grid_x=metadata.nws_grid_x,
+            nws_grid_y=metadata.nws_grid_y,
+            forecast_zone=metadata.forecast_zone,
+            county_zone=metadata.county_zone,
+            fire_weather_zone=metadata.fire_weather_zone,
+            timezone=metadata.timezone,
+            status="ok",
+            updated_at=datetime.now(UTC),
         )
 
 
@@ -154,6 +189,59 @@ def format_county(county: str | None) -> str | None:
 def slugify_ref(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return slug or "unknown"
+
+
+def normalize_office_id(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().upper()
+    return normalized or None
+
+
+def office_code_for(office: str | None) -> str | None:
+    if not office:
+        return None
+    mapped = get_nws_office_mapping().get(mapping_key_for(office), {})
+    office_code = mapped.get("office_code")
+    if isinstance(office_code, str) and office_code.strip():
+        return office_code.strip().upper()
+    return office if office.startswith("K") else f"K{office}"
+
+
+def office_name_for(office: str | None) -> str | None:
+    if not office:
+        return None
+    mapped = get_nws_office_mapping().get(mapping_key_for(office), {})
+    name = mapped.get("name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return office
+
+
+def mapping_key_for(office: str) -> str:
+    return office[1:] if office.startswith("K") and len(office) == 4 else office
+
+
+@lru_cache
+def get_nws_office_mapping() -> dict[str, dict[str, str]]:
+    try:
+        payload = json.loads(OFFICE_MAPPING_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+
+    mapping: dict[str, dict[str, str]] = {}
+    for office, details in payload.items():
+        if not isinstance(office, str) or not isinstance(details, dict):
+            continue
+        office_key = mapping_key_for(office.strip().upper())
+        mapping[office_key] = {
+            key: value
+            for key, value in details.items()
+            if key in {"office_code", "name"} and isinstance(value, str)
+        }
+    return mapping
 
 
 def _append_unique(

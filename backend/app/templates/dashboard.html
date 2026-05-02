@@ -12,7 +12,7 @@
 <script src="/static/js/modules/alert-icons.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-audio.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-banners.js?v=alert-ui-20260501b" defer></script>
-<script src="/static/js/location-editor.js?v=location-search-20260501b" defer></script>
+<script src="/static/js/location-editor.js?v=nws-point-preview-20260501" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -56,6 +56,7 @@
           <p id="location-search-status" class="location-editor__search-status" role="status" aria-live="polite">Select a location, then review and save.</p>
           <div id="location-search-results" class="location-editor__suggestions" role="listbox" hidden></div>
           <p id="location-selected-suggestion" class="location-editor__selected" hidden></p>
+          <div id="location-nws-preview" class="location-editor__nws-preview" role="status" aria-live="polite" hidden></div>
         </div>
         <div class="location-editor__grid">
           <label>

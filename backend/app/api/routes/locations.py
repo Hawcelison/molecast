@@ -12,12 +12,17 @@ from app.schemas.location import (
     LocationStatus,
     ZipLookupResponse,
 )
-from app.schemas.location_resolver import LocationSearchResponse
+from app.schemas.location_resolver import (
+    LocationSearchResponse,
+    NwsPointPreviewRequest,
+    NwsPointPreviewResponse,
+)
 from app.services import location_service
 from app.services.location_resolver_service import (
     InvalidLocationSearchTypeError,
     get_location_resolver_service,
 )
+from app.services.nws_points_service import NwsPointsFetchError
 from app.services.zip_lookup_service import InvalidZipCodeError
 
 
@@ -51,6 +56,20 @@ def search_locations(
     except InvalidLocationSearchTypeError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/location/points/preview", response_model=NwsPointPreviewResponse)
+def preview_location_points(payload: NwsPointPreviewRequest):
+    try:
+        return get_location_resolver_service().preview_nws_point(
+            payload.latitude,
+            payload.longitude,
+        )
+    except NwsPointsFetchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         ) from exc
 

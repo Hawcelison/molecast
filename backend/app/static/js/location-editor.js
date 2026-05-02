@@ -10,6 +10,8 @@
     searchAbortController: null,
     searchResults: [],
     highlightedSearchIndex: -1,
+    previewRequestId: 0,
+    previewAbortController: null,
   };
 
   const fieldNames = [
@@ -95,6 +97,13 @@
     if (state.searchAbortController) {
       state.searchAbortController.abort();
       state.searchAbortController = null;
+    }
+  }
+
+  function abortPendingPreview() {
+    if (state.previewAbortController) {
+      state.previewAbortController.abort();
+      state.previewAbortController = null;
     }
   }
 
@@ -270,6 +279,62 @@
     setSearchExpanded(false);
   }
 
+  function valueOrUnavailable(value) {
+    if (value === null || value === undefined || value === "") {
+      return "Unavailable";
+    }
+    return String(value);
+  }
+
+  function setNwsPreview(content, type) {
+    const preview = getElement("location-nws-preview");
+    if (!preview) {
+      return;
+    }
+    preview.replaceChildren();
+    preview.dataset.state = type || "";
+    if (!content) {
+      preview.hidden = true;
+      return;
+    }
+    preview.hidden = false;
+    if (typeof content === "string") {
+      preview.textContent = content;
+      return;
+    }
+    preview.append(content);
+  }
+
+  function clearNwsPreview() {
+    state.previewRequestId += 1;
+    abortPendingPreview();
+    setNwsPreview(null, "");
+  }
+
+  function renderNwsPreview(previewPayload) {
+    const wrapper = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "location-editor__nws-preview-title";
+    title.textContent = `NWS Office: ${valueOrUnavailable(previewPayload.nws_office_code)} / ${valueOrUnavailable(previewPayload.nws_office_name)}`;
+
+    const grid = document.createElement("div");
+    grid.className = "location-editor__nws-preview-grid";
+
+    [
+      ["Grid", `${valueOrUnavailable(previewPayload.nws_office)} ${valueOrUnavailable(previewPayload.nws_grid_x)},${valueOrUnavailable(previewPayload.nws_grid_y)}`],
+      ["Forecast zone", valueOrUnavailable(previewPayload.forecast_zone)],
+      ["County zone", valueOrUnavailable(previewPayload.county_zone)],
+      ["Timezone", valueOrUnavailable(previewPayload.timezone)],
+    ].forEach(function ([label, value]) {
+      const row = document.createElement("div");
+      row.textContent = `${label}: ${value}`;
+      grid.append(row);
+    });
+
+    wrapper.append(title, grid);
+    setNwsPreview(wrapper, "ok");
+  }
+
   function renderSuggestions(suggestions) {
     const results = getElement("location-search-results");
     if (!results) {
@@ -338,6 +403,7 @@
     }
     clearSuggestions();
     setSelectedSuggestionPreview(suggestion);
+    requestNwsPreview(suggestion.latitude, suggestion.longitude);
     setSearchStatus("Select a location, then review and save.", "success");
     setMessage("Search populated the editor. Review and save to apply.", "success");
     getField("label")?.focus();
@@ -400,6 +466,7 @@
     const query = getSearchInput()?.value.trim() || "";
 
     setSelectedSuggestionPreview(null);
+    clearNwsPreview();
     if (query.length < 2) {
       clearSuggestions();
       setSearchStatus("Type at least 2 characters to search ZIP or city.", "");
@@ -441,6 +508,46 @@
     }
   }
 
+  async function requestNwsPreview(latitude, longitude) {
+    if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
+      setNwsPreview("NWS preview unavailable for this selection.", "warning");
+      return;
+    }
+
+    abortPendingPreview();
+    state.previewRequestId += 1;
+    const requestId = state.previewRequestId;
+    state.previewAbortController = new AbortController();
+    setNwsPreview("NWS preview: checking selected point...", "pending");
+
+    try {
+      const preview = await fetchJson("/api/location/points/preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          latitude: Number(latitude),
+          longitude: Number(longitude),
+        }),
+        signal: state.previewAbortController.signal,
+      });
+      if (requestId !== state.previewRequestId) {
+        return;
+      }
+      renderNwsPreview(preview);
+    } catch (error) {
+      if (error.name === "AbortError" || requestId !== state.previewRequestId) {
+        return;
+      }
+      setNwsPreview(`NWS preview unavailable: ${error.message || "selected point could not be checked."}`, "warning");
+    } finally {
+      if (requestId === state.previewRequestId) {
+        state.previewAbortController = null;
+      }
+    }
+  }
+
   async function lookupZipCode() {
     if (state.isLookingUpZip) {
       return;
@@ -466,6 +573,7 @@
       populateForm(buildZipLocation(lookup));
       clearSuggestions();
       setSelectedSuggestionPreview(null);
+      clearNwsPreview();
       setSearchStatus("Select a location, then review and save.", "");
       setMessage("ZIP lookup populated the editor. Review and save to apply.", "success");
       getField("label")?.focus();
@@ -547,6 +655,7 @@
       setMessage("", "");
       clearSearchTimer();
       abortPendingSearch();
+      clearNwsPreview();
       clearSuggestions();
       setSelectedSuggestionPreview(null);
       if (getSearchInput()) {
