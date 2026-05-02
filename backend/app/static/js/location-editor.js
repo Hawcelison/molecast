@@ -5,6 +5,11 @@
     isOpen: false,
     isSaving: false,
     isLookingUpZip: false,
+    searchTimer: null,
+    searchRequestId: 0,
+    searchAbortController: null,
+    searchResults: [],
+    highlightedSearchIndex: -1,
   };
 
   const fieldNames = [
@@ -32,6 +37,10 @@
     return getElement(`location-${name.replace("_", "-")}`);
   }
 
+  function getSearchInput() {
+    return getElement("location-search");
+  }
+
   function formatLocation(location) {
     if (!location) {
       return "Unavailable";
@@ -56,6 +65,39 @@
     message.dataset.state = type || "";
   }
 
+  function setSearchStatus(text, type) {
+    const status = getElement("location-search-status");
+    if (!status) {
+      return;
+    }
+    status.textContent = text || "";
+    status.dataset.state = type || "";
+  }
+
+  function setSearchExpanded(isExpanded) {
+    const input = getSearchInput();
+    if (input) {
+      input.setAttribute("aria-expanded", String(isExpanded));
+      if (!isExpanded) {
+        input.removeAttribute("aria-activedescendant");
+      }
+    }
+  }
+
+  function clearSearchTimer() {
+    if (state.searchTimer) {
+      window.clearTimeout(state.searchTimer);
+      state.searchTimer = null;
+    }
+  }
+
+  function abortPendingSearch() {
+    if (state.searchAbortController) {
+      state.searchAbortController.abort();
+      state.searchAbortController = null;
+    }
+  }
+
   function setPanelOpen(isOpen) {
     state.isOpen = isOpen;
     const panel = getElement("location-editor-panel");
@@ -69,7 +111,8 @@
     }
     if (isOpen) {
       populateForm(state.activeLocation);
-      getField("label")?.focus();
+      setSearchStatus("Select a location, then review and save.", "");
+      getSearchInput()?.focus();
     }
   }
 
@@ -155,6 +198,151 @@
     };
   }
 
+  function buildSuggestionLocation(suggestion) {
+    const city = suggestion.city || "";
+    const stateCode = suggestion.state || "";
+    const zipCode = suggestion.zip || "";
+    const cityState = [city, stateCode].filter(Boolean).join(", ");
+    const label = suggestion.kind === "zip" && zipCode
+      ? `${cityState} ${zipCode}`.trim()
+      : cityState || suggestion.label || "Selected location";
+
+    return {
+      label: label,
+      name: label,
+      city: city,
+      county: suggestion.county || "",
+      state: stateCode,
+      zip_code: zipCode,
+      latitude: suggestion.latitude,
+      longitude: suggestion.longitude,
+      default_zoom: suggestion.default_zoom || parseNumberField("default_zoom") || 9,
+    };
+  }
+
+  function readableToken(value) {
+    return String(value || "")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, function (letter) {
+        return letter.toUpperCase();
+      });
+  }
+
+  function suggestionSecondaryText(suggestion) {
+    const parts = [];
+    const county = suggestion.county || "";
+    if (suggestion.kind) {
+      parts.push(readableToken(suggestion.kind));
+    }
+    if (suggestion.accuracy) {
+      parts.push(readableToken(suggestion.accuracy));
+    }
+    if (county) {
+      parts.push(county.toLowerCase().endsWith(" county") ? county : `${county} County`);
+    }
+    return parts.join(" - ");
+  }
+
+  function updateHighlightedSuggestion() {
+    const input = getSearchInput();
+    const options = Array.from(getElement("location-search-results")?.querySelectorAll("[role='option']") || []);
+    options.forEach(function (option, index) {
+      const isHighlighted = index === state.highlightedSearchIndex;
+      option.classList.toggle("is-highlighted", isHighlighted);
+      option.setAttribute("aria-selected", String(isHighlighted));
+      if (isHighlighted && input) {
+        input.setAttribute("aria-activedescendant", option.id);
+      }
+    });
+    if (state.highlightedSearchIndex < 0 && input) {
+      input.removeAttribute("aria-activedescendant");
+    }
+  }
+
+  function clearSuggestions() {
+    const results = getElement("location-search-results");
+    state.searchResults = [];
+    state.highlightedSearchIndex = -1;
+    if (results) {
+      results.replaceChildren();
+      results.hidden = true;
+    }
+    setSearchExpanded(false);
+  }
+
+  function renderSuggestions(suggestions) {
+    const results = getElement("location-search-results");
+    if (!results) {
+      return;
+    }
+
+    results.replaceChildren();
+    state.searchResults = suggestions;
+    state.highlightedSearchIndex = suggestions.length > 0 ? 0 : -1;
+
+    suggestions.forEach(function (suggestion, index) {
+      const option = document.createElement("button");
+      option.id = `location-search-option-${index}`;
+      option.className = "location-editor__suggestion";
+      option.type = "button";
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", "false");
+      option.addEventListener("click", function () {
+        selectSuggestion(index);
+      });
+
+      const primary = document.createElement("span");
+      primary.className = "location-editor__suggestion-primary";
+      primary.textContent = suggestion.label || "Unnamed location";
+
+      const secondary = document.createElement("span");
+      secondary.className = "location-editor__suggestion-secondary";
+      secondary.textContent = suggestionSecondaryText(suggestion);
+
+      option.append(primary, secondary);
+      results.append(option);
+    });
+
+    results.hidden = suggestions.length === 0;
+    setSearchExpanded(suggestions.length > 0);
+    updateHighlightedSuggestion();
+  }
+
+  function setSelectedSuggestionPreview(suggestion) {
+    const preview = getElement("location-selected-suggestion");
+    if (!preview) {
+      return;
+    }
+    if (!suggestion) {
+      preview.hidden = true;
+      preview.textContent = "";
+      return;
+    }
+    const secondary = suggestionSecondaryText(suggestion);
+    preview.textContent = secondary
+      ? `Selected: ${suggestion.label} (${secondary})`
+      : `Selected: ${suggestion.label}`;
+    preview.hidden = false;
+  }
+
+  function selectSuggestion(index) {
+    const suggestion = state.searchResults[index];
+    if (!suggestion) {
+      return;
+    }
+
+    populateForm(buildSuggestionLocation(suggestion));
+    const input = getSearchInput();
+    if (input) {
+      input.value = suggestion.label || "";
+    }
+    clearSuggestions();
+    setSelectedSuggestionPreview(suggestion);
+    setSearchStatus("Select a location, then review and save.", "success");
+    setMessage("Search populated the editor. Review and save to apply.", "success");
+    getField("label")?.focus();
+  }
+
   async function fetchJson(url, options) {
     const response = await window.fetch(url, options);
     let body = null;
@@ -168,6 +356,59 @@
       throw new Error(typeof detail === "string" ? detail : `Request failed with ${response.status}.`);
     }
     return body;
+  }
+
+  async function searchLocations(query, requestId) {
+    abortPendingSearch();
+    state.searchAbortController = new AbortController();
+    setSearchStatus("Searching locations...", "pending");
+
+    try {
+      const payload = await fetchJson(
+        `/api/location/search?q=${encodeURIComponent(query)}&limit=8&type=zip,city`,
+        { signal: state.searchAbortController.signal },
+      );
+      if (requestId !== state.searchRequestId) {
+        return;
+      }
+      const suggestions = Array.isArray(payload?.results) ? payload.results : [];
+      if (suggestions.length === 0) {
+        clearSuggestions();
+        setSearchStatus("No matching locations found", "empty");
+        return;
+      }
+      renderSuggestions(suggestions);
+      setSearchStatus("Select a location, then review and save.", "");
+    } catch (error) {
+      if (error.name === "AbortError" || requestId !== state.searchRequestId) {
+        return;
+      }
+      clearSuggestions();
+      setSearchStatus(error.message || "Location search failed.", "error");
+    } finally {
+      if (requestId === state.searchRequestId) {
+        state.searchAbortController = null;
+      }
+    }
+  }
+
+  function queueLocationSearch() {
+    clearSearchTimer();
+    abortPendingSearch();
+    state.searchRequestId += 1;
+    const requestId = state.searchRequestId;
+    const query = getSearchInput()?.value.trim() || "";
+
+    setSelectedSuggestionPreview(null);
+    if (query.length < 2) {
+      clearSuggestions();
+      setSearchStatus("Type at least 2 characters to search ZIP or city.", "");
+      return;
+    }
+
+    state.searchTimer = window.setTimeout(function () {
+      searchLocations(query, requestId);
+    }, 300);
   }
 
   function updateConfig(location) {
@@ -223,6 +464,9 @@
     try {
       const lookup = await fetchJson(`/api/location/lookup/${encodeURIComponent(zipCode)}`);
       populateForm(buildZipLocation(lookup));
+      clearSuggestions();
+      setSelectedSuggestionPreview(null);
+      setSearchStatus("Select a location, then review and save.", "");
       setMessage("ZIP lookup populated the editor. Review and save to apply.", "success");
       getField("label")?.focus();
     } catch (error) {
@@ -301,11 +545,49 @@
     });
     getElement("location-editor-cancel")?.addEventListener("click", function () {
       setMessage("", "");
+      clearSearchTimer();
+      abortPendingSearch();
+      clearSuggestions();
+      setSelectedSuggestionPreview(null);
+      if (getSearchInput()) {
+        getSearchInput().value = "";
+      }
+      setSearchStatus("Select a location, then review and save.", "");
       populateForm(state.activeLocation);
       setPanelOpen(false);
     });
     getElement("location-zip-lookup")?.addEventListener("click", lookupZipCode);
     getElement("location-editor-form")?.addEventListener("submit", saveLocation);
+    getSearchInput()?.addEventListener("input", queueLocationSearch);
+    getSearchInput()?.addEventListener("keydown", function (event) {
+      if (event.key === "ArrowDown") {
+        if (state.searchResults.length > 0) {
+          event.preventDefault();
+          state.highlightedSearchIndex = Math.min(
+            state.highlightedSearchIndex + 1,
+            state.searchResults.length - 1,
+          );
+          updateHighlightedSuggestion();
+        }
+      } else if (event.key === "ArrowUp") {
+        if (state.searchResults.length > 0) {
+          event.preventDefault();
+          state.highlightedSearchIndex = Math.max(state.highlightedSearchIndex - 1, 0);
+          updateHighlightedSuggestion();
+        }
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        if (state.highlightedSearchIndex >= 0) {
+          selectSuggestion(state.highlightedSearchIndex);
+        }
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        clearSearchTimer();
+        abortPendingSearch();
+        clearSuggestions();
+        setSearchStatus("Select a location, then review and save.", "");
+      }
+    });
   }
 
   async function initialize() {
@@ -325,6 +607,9 @@
   window.MOLECAST_LOCATION_EDITOR = {
     refresh: refresh,
     lookupZipCode: lookupZipCode,
+    searchLocations: function () {
+      queueLocationSearch();
+    },
     getActiveLocation: function () {
       return state.activeLocation;
     },

@@ -323,6 +323,13 @@ table {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.location-editor__search {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 42rem;
+  position: relative;
+}
+
 .location-editor label {
   display: grid;
   font-size: 0.82rem;
@@ -340,6 +347,83 @@ table {
   min-width: 0;
   padding: 0.48rem 0.55rem;
   width: 100%;
+}
+
+.location-editor__search-status,
+.location-editor__selected {
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.location-editor__search-status[data-state="error"] {
+  color: #b91c1c;
+}
+
+.location-editor__search-status[data-state="success"] {
+  color: #166534;
+}
+
+.location-editor__search-status[data-state="pending"] {
+  color: #1d4ed8;
+}
+
+.location-editor__search-status[data-state="empty"] {
+  color: color-mix(in srgb, currentColor 72%, transparent);
+}
+
+.location-editor__suggestions {
+  background: #ffffff;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 6px;
+  box-shadow: 0 10px 24px rgb(15 23 42 / 0.14);
+  display: grid;
+  max-height: 17rem;
+  overflow-y: auto;
+  position: absolute;
+  top: calc(100% - 0.1rem);
+  width: 100%;
+  z-index: 30;
+}
+
+.location-editor__suggestions[hidden] {
+  display: none;
+}
+
+.location-editor__suggestion {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.58rem 0.7rem;
+  text-align: left;
+}
+
+.location-editor__suggestion:last-child {
+  border-bottom: 0;
+}
+
+.location-editor__suggestion:hover,
+.location-editor__suggestion.is-highlighted {
+  background: #e0f2fe;
+}
+
+.location-editor__suggestion-primary {
+  font-size: 0.9rem;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.location-editor__suggestion-secondary {
+  color: color-mix(in srgb, currentColor 68%, transparent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .location-editor__lookup {
