@@ -12,6 +12,9 @@
     highlightedSearchIndex: -1,
     previewRequestId: 0,
     previewAbortController: null,
+    previewMarker: null,
+    previewMarkerRetryTimer: null,
+    previewMarkerRetryCount: 0,
   };
 
   const fieldNames = [
@@ -76,6 +79,16 @@
     status.dataset.state = type || "";
   }
 
+  function setPreviewPinStatus(text, type) {
+    const status = getElement("location-preview-pin-status");
+    if (!status) {
+      return;
+    }
+    status.textContent = text || "";
+    status.dataset.state = type || "";
+    status.hidden = !text;
+  }
+
   function setSearchExpanded(isExpanded) {
     const input = getSearchInput();
     if (input) {
@@ -105,6 +118,19 @@
       state.previewAbortController.abort();
       state.previewAbortController = null;
     }
+  }
+
+  function clearPreviewMarker() {
+    if (state.previewMarkerRetryTimer) {
+      window.clearTimeout(state.previewMarkerRetryTimer);
+      state.previewMarkerRetryTimer = null;
+    }
+    state.previewMarkerRetryCount = 0;
+    if (state.previewMarker) {
+      state.previewMarker.remove();
+      state.previewMarker = null;
+    }
+    setPreviewPinStatus("", "");
   }
 
   function setPanelOpen(isOpen) {
@@ -311,6 +337,111 @@
     setNwsPreview(null, "");
   }
 
+  function makePreviewMarkerElement() {
+    const marker = document.createElement("div");
+    marker.className = "location-preview-marker";
+    marker.setAttribute("aria-label", "Preview location pin");
+    marker.setAttribute("role", "img");
+
+    const dot = document.createElement("span");
+    dot.className = "location-preview-marker__dot";
+    marker.append(dot);
+    return marker;
+  }
+
+  function validCoordinate(latitude, longitude) {
+    const lat = Number(latitude);
+    const lon = Number(longitude);
+    return Number.isFinite(lat) && lat >= -90 && lat <= 90 && Number.isFinite(lon) && lon >= -180 && lon <= 180;
+  }
+
+  function formatCoordinate(value) {
+    return Number(value).toFixed(4);
+  }
+
+  function updateLatLonFields(latitude, longitude) {
+    const latitudeField = getField("latitude");
+    const longitudeField = getField("longitude");
+    if (latitudeField) {
+      latitudeField.value = formatCoordinate(latitude);
+    }
+    if (longitudeField) {
+      longitudeField.value = formatCoordinate(longitude);
+    }
+  }
+
+  function focusPreviewLocation(latitude, longitude) {
+    const map = window.MOLECAST_MAP;
+    if (!map || typeof map.easeTo !== "function") {
+      return;
+    }
+    map.easeTo({
+      center: [Number(longitude), Number(latitude)],
+      zoom: parseNumberField("default_zoom") || 9,
+      bearing: 0,
+      pitch: 0,
+      duration: 450,
+    });
+  }
+
+  function handlePreviewMarkerDragEnd() {
+    if (!state.previewMarker || typeof state.previewMarker.getLngLat !== "function") {
+      return;
+    }
+    const lngLat = state.previewMarker.getLngLat();
+    updateLatLonFields(lngLat.lat, lngLat.lng);
+    setPreviewPinStatus("Preview pin moved. Drag pin to adjust location. Review and save to make active.", "success");
+    setMessage("Preview pin moved. Review and save to apply.", "success");
+    requestNwsPreview(lngLat.lat, lngLat.lng);
+  }
+
+  function schedulePreviewMarkerRetry(latitude, longitude) {
+    if (state.previewMarkerRetryTimer) {
+      window.clearTimeout(state.previewMarkerRetryTimer);
+      state.previewMarkerRetryTimer = null;
+    }
+    if (state.previewMarkerRetryCount >= 30) {
+      return;
+    }
+    state.previewMarkerRetryCount += 1;
+    state.previewMarkerRetryTimer = window.setTimeout(function () {
+      state.previewMarkerRetryTimer = null;
+      placePreviewMarker(latitude, longitude, { shouldFocus: false });
+    }, 100);
+  }
+
+  function placePreviewMarker(latitude, longitude, options) {
+    const shouldFocus = !options || options.shouldFocus !== false;
+    if (!validCoordinate(latitude, longitude)) {
+      clearPreviewMarker();
+      setPreviewPinStatus("Preview pin unavailable for this selection.", "warning");
+      return;
+    }
+
+    const map = window.MOLECAST_MAP;
+    if (!map || !window.mapboxgl || typeof window.mapboxgl.Marker !== "function") {
+      setPreviewPinStatus("Preview pin waiting for the map. Review and save to make active.", "pending");
+      schedulePreviewMarkerRetry(latitude, longitude);
+      return;
+    }
+
+    state.previewMarkerRetryCount = 0;
+    if (!state.previewMarker) {
+      state.previewMarker = new window.mapboxgl.Marker({
+        element: makePreviewMarkerElement(),
+        anchor: "bottom",
+        draggable: true,
+      });
+      state.previewMarker.on("dragend", handlePreviewMarkerDragEnd);
+    }
+
+    state.previewMarker.setLngLat([Number(longitude), Number(latitude)]).addTo(map);
+    setPreviewPinStatus("Preview pin placed. Drag pin to adjust location. Review and save to make active.", "success");
+    if (shouldFocus) {
+      focusPreviewLocation(latitude, longitude);
+    }
+  }
+
   function renderNwsPreview(previewPayload) {
     const wrapper = document.createElement("div");
     const title = document.createElement("div");
@@ -404,8 +535,9 @@
     clearSuggestions();
     setSelectedSuggestionPreview(suggestion);
     requestNwsPreview(suggestion.latitude, suggestion.longitude);
+    placePreviewMarker(suggestion.latitude, suggestion.longitude);
     setSearchStatus("Select a location, then review and save.", "success");
-    setMessage("Search populated the editor. Review and save to apply.", "success");
+    setMessage("Search populated the editor. Preview only; review and save to apply.", "success");
     getField("label")?.focus();
   }
 
@@ -467,6 +599,7 @@
 
     setSelectedSuggestionPreview(null);
     clearNwsPreview();
+    clearPreviewMarker();
     if (query.length < 2) {
       clearSuggestions();
       setSearchStatus("Type at least 2 characters to search ZIP or city.", "");
@@ -570,12 +703,14 @@
 
     try {
       const lookup = await fetchJson(`/api/location/lookup/${encodeURIComponent(zipCode)}`);
-      populateForm(buildZipLocation(lookup));
+      const location = buildZipLocation(lookup);
+      populateForm(location);
       clearSuggestions();
       setSelectedSuggestionPreview(null);
-      clearNwsPreview();
+      requestNwsPreview(location.latitude, location.longitude);
+      placePreviewMarker(location.latitude, location.longitude);
       setSearchStatus("Select a location, then review and save.", "");
-      setMessage("ZIP lookup populated the editor. Review and save to apply.", "success");
+      setMessage("ZIP lookup populated the editor. Preview only; review and save to apply.", "success");
       getField("label")?.focus();
     } catch (error) {
       setMessage(error.message || "ZIP lookup failed.", "error");
@@ -634,6 +769,7 @@
       updateDisplay();
       populateForm(location);
       moveMap(location);
+      clearPreviewMarker();
       await refreshAlerts();
       setMessage("Location saved.", "success");
     } catch (error) {
@@ -656,6 +792,7 @@
       clearSearchTimer();
       abortPendingSearch();
       clearNwsPreview();
+      clearPreviewMarker();
       clearSuggestions();
       setSelectedSuggestionPreview(null);
       if (getSearchInput()) {

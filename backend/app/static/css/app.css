@@ -350,7 +350,8 @@ table {
 }
 
 .location-editor__search-status,
-.location-editor__selected {
+.location-editor__selected,
+.location-editor__pin-status {
   color: color-mix(in srgb, currentColor 72%, transparent);
   font-size: 0.82rem;
   font-weight: 700;
@@ -372,6 +373,18 @@ table {
 
 .location-editor__search-status[data-state="empty"] {
   color: color-mix(in srgb, currentColor 72%, transparent);
+}
+
+.location-editor__pin-status[data-state="success"] {
+  color: #166534;
+}
+
+.location-editor__pin-status[data-state="pending"] {
+  color: #1d4ed8;
+}
+
+.location-editor__pin-status[data-state="warning"] {
+  color: #b45309;
 }
 
 .location-editor__nws-preview {
@@ -497,6 +510,33 @@ table {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.location-preview-marker {
+  align-items: center;
+  background: #ffffff;
+  border: 2px solid #0f172a;
+  border-radius: 999px 999px 999px 0;
+  box-shadow: 0 6px 18px rgb(15 23 42 / 0.32);
+  box-sizing: border-box;
+  display: flex;
+  height: 1.45rem;
+  justify-content: center;
+  transform: rotate(-45deg);
+  width: 1.45rem;
+  cursor: grab;
+}
+
+.location-preview-marker__dot {
+  background: #f97316;
+  border-radius: 999px;
+  display: block;
+  height: 0.62rem;
+  width: 0.62rem;
+}
+
+.location-preview-marker.mapboxgl-marker-dragging {
+  cursor: grabbing;
 }
 
 @media (max-width: 760px) {
