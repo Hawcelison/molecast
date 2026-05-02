@@ -73,6 +73,7 @@ class LocationDeleteResponse(BaseModel):
 
 
 class ZipLookupResponse(BaseModel):
+    zip: str
     zip_code: str
     city: str
     state: str

@@ -2,7 +2,7 @@
 
 APP_NAME = "Molecast"
 # Default only. Runtime version is read through Settings.app_version from APP_VERSION.
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 APP_VERSION_ENV_VAR = "APP_VERSION"
 APP_VERSION_SCHEME = "semver"
 CHANGELOG_FILE_NAME = "CHANGELOG.md"
@@ -22,7 +22,7 @@ DEFAULT_LOCATION_ZOOM = 9
 WEATHER_REFRESH_SECONDS = 900
 ALERT_REFRESH_SECONDS = 60
 NWS_ACTIVE_ALERTS_URL = "https://api.weather.gov/alerts/active"
-NWS_USER_AGENT = "Molecast/0.1.0"
+NWS_USER_AGENT = "Molecast/0.2.0"
 TEST_ALERTS_FILE = "test/alerts_test.json"
 LOG_RETENTION_DAYS = 7
 LOG_LEVEL = "INFO"

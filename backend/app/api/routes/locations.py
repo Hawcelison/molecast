@@ -35,8 +35,21 @@ def get_location_status(db: Session = Depends(get_db)):
     return location_service.get_location_status(db, settings)
 
 
-@router.get("/location/lookup/{zip_code}", response_model=ZipLookupResponse)
+@router.get("/location/zip/{zip_code}", response_model=ZipLookupResponse)
 def lookup_zip_code(zip_code: str):
+    return _lookup_zip_code_response(zip_code)
+
+
+@router.get(
+    "/location/lookup/{zip_code}",
+    response_model=ZipLookupResponse,
+    include_in_schema=False,
+)
+def lookup_zip_code_legacy(zip_code: str):
+    return _lookup_zip_code_response(zip_code)
+
+
+def _lookup_zip_code_response(zip_code: str) -> ZipLookupResponse:
     try:
         lookup_result = location_service.lookup_zip_code(zip_code)
     except InvalidZipCodeError as exc:
@@ -50,7 +63,16 @@ def lookup_zip_code(zip_code: str):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="ZIP code not found in local lookup data.",
         )
-    return lookup_result
+    return ZipLookupResponse(
+        zip=lookup_result.zip_code,
+        zip_code=lookup_result.zip_code,
+        city=lookup_result.city,
+        state=lookup_result.state,
+        county=lookup_result.county,
+        latitude=lookup_result.latitude,
+        longitude=lookup_result.longitude,
+        default_zoom=lookup_result.default_zoom,
+    )
 
 
 @router.post("/location/active", response_model=LocationRead)
