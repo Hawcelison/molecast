@@ -277,7 +277,9 @@
     const stateCode = suggestion.state || "";
     const zipCode = suggestion.zip || "";
     const cityState = [city, stateCode].filter(Boolean).join(", ");
-    const label = suggestion.kind === "zip" && zipCode
+    const label = suggestion.kind === "address"
+      ? suggestion.label || [cityState, zipCode].filter(Boolean).join(" ").trim() || "Selected address"
+      : suggestion.kind === "zip" && zipCode
       ? `${cityState} ${zipCode}`.trim()
       : cityState || suggestion.label || "Selected location";
 
@@ -781,7 +783,7 @@
 
     try {
       const payload = await fetchJson(
-        `/api/location/search?q=${encodeURIComponent(query)}&limit=8&type=zip,city`,
+        `/api/location/search?q=${encodeURIComponent(query)}&limit=8&type=zip,city,address`,
         { signal: state.searchAbortController.signal },
       );
       if (requestId !== state.searchRequestId) {
@@ -821,7 +823,7 @@
     clearPreviewMarker();
     if (query.length < 2) {
       clearSuggestions();
-      setSearchStatus("Type at least 2 characters to search ZIP or city.", "");
+      setSearchStatus("Type at least 2 characters to search ZIP, city, or address.", "");
       return;
     }
 

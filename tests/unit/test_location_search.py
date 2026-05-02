@@ -7,9 +7,43 @@ import pytest
 from fastapi import HTTPException
 
 from app.api.routes import locations as locations_route
+from app.geocoders.base import (
+    AddressGeocodeCandidate,
+    AddressGeocodeRequest,
+    AddressGeocodeResponse,
+)
 from app.repositories.location_lookup_repository import LocationLookupRepository
 from app.services.location_resolver_service import LocationResolverService
 from scripts.import_location_lookup import import_location_lookup
+
+
+class FakeAddressLookupService:
+    def __init__(self) -> None:
+        self.calls: list[AddressGeocodeRequest] = []
+
+    def lookup(self, request: AddressGeocodeRequest) -> AddressGeocodeResponse:
+        self.calls.append(request)
+        return AddressGeocodeResponse(
+            query=request.address or "",
+            provider="fake",
+            count=1,
+            candidates=[
+                AddressGeocodeCandidate(
+                    ref="census:123:left:0",
+                    matched_address="4222 FIRESIDE AVE, PORTAGE, MI, 49002",
+                    display_label="Portage, MI 49002",
+                    latitude=42.1976,
+                    longitude=-85.5386,
+                    city="Portage",
+                    state="MI",
+                    zip_code="49002",
+                    source="census",
+                    accuracy="address_range_interpolated",
+                    match_quality="matched",
+                )
+            ],
+            attribution="Fake",
+        )
 
 
 def test_search_endpoint_returns_zip_prefix_results() -> None:
@@ -72,6 +106,38 @@ def test_search_endpoint_type_city_only_filters_results() -> None:
     assert {result.kind for result in response.results} == {"city"}
 
 
+def test_search_service_returns_address_results_for_address_like_query() -> None:
+    address_service = FakeAddressLookupService()
+    service = LocationResolverService(
+        LocationLookupRepository(Path("backend/app/data/location_lookup.sqlite3")),
+        address_service=address_service,
+    )
+
+    response = service.search("4222 Fireside Ave Portage MI", limit=8, types="address")
+
+    assert response.count == 1
+    assert response.results[0].kind == "address"
+    assert response.results[0].label == "4222 FIRESIDE AVE, PORTAGE, MI, 49002"
+    assert response.results[0].city == "Portage"
+    assert response.results[0].state == "MI"
+    assert response.results[0].zip == "49002"
+    assert response.results[0].default_zoom == 14
+    assert address_service.calls[0].address == "4222 Fireside Ave Portage MI"
+
+
+def test_search_service_skips_address_provider_for_city_like_query() -> None:
+    address_service = FakeAddressLookupService()
+    service = LocationResolverService(
+        LocationLookupRepository(Path("backend/app/data/location_lookup.sqlite3")),
+        address_service=address_service,
+    )
+
+    response = service.search("Portage MI", limit=8, types="address")
+
+    assert response.count == 0
+    assert address_service.calls == []
+
+
 def test_search_endpoint_limit_is_applied() -> None:
     response = locations_route.search_locations(q="490", limit=1, search_type=None)
 
@@ -128,7 +194,7 @@ def test_search_endpoint_short_query_returns_empty_results(query: str) -> None:
 
 def test_search_endpoint_rejects_invalid_type_filter() -> None:
     with pytest.raises(HTTPException) as exc_info:
-        locations_route.search_locations(q="490", limit=8, search_type="address")
+        locations_route.search_locations(q="490", limit=8, search_type="place")
 
     assert exc_info.value.status_code == 422
 

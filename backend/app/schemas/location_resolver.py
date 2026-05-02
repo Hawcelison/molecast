@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class LocationSearchSuggestion(BaseModel):
     ref: str
-    kind: Literal["zip", "city"]
+    kind: Literal["zip", "city", "address"]
     label: str
     zip: str | None = None
     city: str
@@ -15,8 +15,8 @@ class LocationSearchSuggestion(BaseModel):
     latitude: float
     longitude: float
     default_zoom: int = Field(ge=0, le=22)
-    accuracy: Literal["zip_centroid", "city_representative"]
-    source: Literal["local"] = "local"
+    accuracy: Literal["zip_centroid", "city_representative", "address_range_interpolated"]
+    source: Literal["local", "census"] = "local"
 
 
 class LocationSearchResponse(BaseModel):

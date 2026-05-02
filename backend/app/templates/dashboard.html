@@ -12,7 +12,7 @@
 <script src="/static/js/modules/alert-icons.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-audio.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-banners.js?v=alert-ui-20260501b" defer></script>
-<script src="/static/js/location-editor.js?v=location-pin-refinement-20260501" defer></script>
+<script src="/static/js/location-editor.js?v=location-search-address-20260502" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -38,14 +38,14 @@
       <form id="location-editor-form" class="location-editor__form">
         <div class="location-editor__search">
           <label for="location-search">
-            Search ZIP or city
+            Search ZIP, city, or address
             <input
               id="location-search"
               name="location_search"
               type="search"
               maxlength="120"
               autocomplete="off"
-              placeholder="Type ZIP, city, or city/state"
+              placeholder="Type ZIP, city/state, or street address"
               role="combobox"
               aria-autocomplete="list"
               aria-expanded="false"

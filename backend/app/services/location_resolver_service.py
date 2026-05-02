@@ -8,6 +8,13 @@ from functools import lru_cache
 from pathlib import Path
 
 from app.config import settings
+from app.geocoders.base import (
+    AddressGeocodeCandidate,
+    AddressGeocodeRequest,
+    AddressGeocoderError,
+    AddressGeocoderValidationError,
+    has_structure_number_and_street_name,
+)
 from app.repositories.location_lookup_repository import (
     CityLocationRecord,
     LocationLookupRepository,
@@ -18,13 +25,15 @@ from app.schemas.location_resolver import (
     LocationSearchSuggestion,
     NwsPointPreviewResponse,
 )
+from app.services.address_lookup_service import AddressLookupService, get_address_lookup_service
 from app.services.nws_points_service import NwsPointsService, nws_points_service
 
 
 MIN_SEARCH_QUERY_LENGTH = 2
+MIN_ADDRESS_QUERY_LENGTH = 6
 DEFAULT_SEARCH_LIMIT = 8
 MAX_SEARCH_LIMIT = 20
-VALID_SEARCH_TYPES = {"zip", "city"}
+VALID_SEARCH_TYPES = {"zip", "city", "address"}
 OFFICE_MAPPING_PATH = settings.app_dir / "data" / "nws_offices.json"
 
 
@@ -43,9 +52,11 @@ class LocationResolverService:
         self,
         repository: LocationLookupRepository,
         points_service: NwsPointsService = nws_points_service,
+        address_service: AddressLookupService | None = None,
     ) -> None:
         self.repository = repository
         self.points_service = points_service
+        self.address_service = address_service or get_address_lookup_service()
 
     def search(
         self,
@@ -76,6 +87,19 @@ class LocationResolverService:
                 parsed_city_query.state,
             ):
                 _append_unique(results, seen_refs, city_suggestion(record), capped_limit)
+
+        if "address" in search_types and len(results) < capped_limit and is_address_like_query(normalized_query):
+            remaining_limit = capped_limit - len(results)
+            try:
+                address_response = self.address_service.lookup(
+                    AddressGeocodeRequest(address=normalized_query, limit=remaining_limit)
+                )
+            except (AddressGeocoderValidationError, AddressGeocoderError):
+                address_response = None
+
+            if address_response:
+                for candidate in address_response.candidates:
+                    _append_unique(results, seen_refs, address_suggestion(candidate), capped_limit)
 
         return LocationSearchResponse(
             query=normalized_query,
@@ -141,6 +165,14 @@ def parse_city_query(query: str) -> ParsedCityQuery:
     return ParsedCityQuery(city=city_state_query)
 
 
+def is_address_like_query(query: str) -> bool:
+    return (
+        len(query) >= MIN_ADDRESS_QUERY_LENGTH
+        and bool(re.search(r"\d+\s+\S+", query))
+        and has_structure_number_and_street_name(query)
+    )
+
+
 def zip_suggestion(record: ZipLocationRecord) -> LocationSearchSuggestion:
     county = format_county(record.county)
     county_label = f" - {county}" if county else ""
@@ -174,6 +206,23 @@ def city_suggestion(record: CityLocationRecord) -> LocationSearchSuggestion:
         default_zoom=max(record.default_zoom, 10),
         accuracy="city_representative",
         source="local",
+    )
+
+
+def address_suggestion(candidate: AddressGeocodeCandidate) -> LocationSearchSuggestion:
+    return LocationSearchSuggestion(
+        ref=candidate.ref,
+        kind="address",
+        label=candidate.matched_address or candidate.display_label,
+        zip=candidate.zip_code,
+        city=candidate.city or "",
+        state=candidate.state or "",
+        county=None,
+        latitude=candidate.latitude,
+        longitude=candidate.longitude,
+        default_zoom=14,
+        accuracy="address_range_interpolated",
+        source="census",
     )
 
 
