@@ -12,6 +12,9 @@
     highlightedSearchIndex: -1,
     previewRequestId: 0,
     previewAbortController: null,
+    activeMarker: null,
+    activeMarkerRetryTimer: null,
+    activeMarkerRetryCount: 0,
     previewMarker: null,
     previewMarkerRetryTimer: null,
     previewMarkerRetryCount: 0,
@@ -131,6 +134,18 @@
       state.previewMarker = null;
     }
     setPreviewPinStatus("", "");
+  }
+
+  function clearActiveMarker() {
+    if (state.activeMarkerRetryTimer) {
+      window.clearTimeout(state.activeMarkerRetryTimer);
+      state.activeMarkerRetryTimer = null;
+    }
+    state.activeMarkerRetryCount = 0;
+    if (state.activeMarker) {
+      state.activeMarker.remove();
+      state.activeMarker = null;
+    }
   }
 
   function setPanelOpen(isOpen) {
@@ -339,13 +354,30 @@
 
   function makePreviewMarkerElement() {
     const marker = document.createElement("div");
-    marker.className = "location-preview-marker";
-    marker.setAttribute("aria-label", "Preview location pin");
+    marker.className = "location-preview-marker molecast-preview-location-marker";
+    marker.setAttribute("aria-label", "Preview Location - not saved yet");
     marker.setAttribute("role", "img");
 
     const dot = document.createElement("span");
     dot.className = "location-preview-marker__dot";
     marker.append(dot);
+    return marker;
+  }
+
+  function makeActiveMarkerElement() {
+    const marker = document.createElement("div");
+    marker.className = "location-active-marker molecast-active-location-marker";
+    marker.setAttribute("aria-label", "Active Location");
+    marker.setAttribute("role", "img");
+
+    const dot = document.createElement("span");
+    dot.className = "location-active-marker__dot";
+
+    const label = document.createElement("span");
+    label.className = "location-active-marker__label";
+    label.textContent = "Active Location";
+
+    marker.append(dot, label);
     return marker;
   }
 
@@ -390,9 +422,49 @@
     }
     const lngLat = state.previewMarker.getLngLat();
     updateLatLonFields(lngLat.lat, lngLat.lng);
-    setPreviewPinStatus("Preview pin moved. Drag pin to adjust location. Review and save to make active.", "success");
+    setPreviewPinStatus("Preview Location - not saved yet. Drag pin to adjust location; save to make active.", "success");
     setMessage("Preview pin moved. Review and save to apply.", "success");
     requestNwsPreview(lngLat.lat, lngLat.lng);
+  }
+
+  function scheduleActiveMarkerRetry() {
+    if (state.activeMarkerRetryTimer) {
+      window.clearTimeout(state.activeMarkerRetryTimer);
+      state.activeMarkerRetryTimer = null;
+    }
+    if (state.activeMarkerRetryCount >= 30) {
+      return;
+    }
+    state.activeMarkerRetryCount += 1;
+    state.activeMarkerRetryTimer = window.setTimeout(function () {
+      state.activeMarkerRetryTimer = null;
+      placeActiveMarker(state.activeLocation);
+    }, 100);
+  }
+
+  function placeActiveMarker(location) {
+    if (!location || !validCoordinate(location.latitude, location.longitude)) {
+      clearActiveMarker();
+      return;
+    }
+
+    const map = window.MOLECAST_MAP;
+    if (!map || !window.mapboxgl || typeof window.mapboxgl.Marker !== "function") {
+      scheduleActiveMarkerRetry();
+      return;
+    }
+
+    state.activeMarkerRetryCount = 0;
+    if (!state.activeMarker) {
+      state.activeMarker = new window.mapboxgl.Marker({
+        element: makeActiveMarkerElement(),
+        anchor: "bottom",
+        draggable: false,
+        offset: [0, -4],
+      });
+    }
+
+    state.activeMarker.setLngLat([Number(location.longitude), Number(location.latitude)]).addTo(map);
   }
 
   function schedulePreviewMarkerRetry(latitude, longitude) {
@@ -420,7 +492,7 @@
 
     const map = window.MOLECAST_MAP;
     if (!map || !window.mapboxgl || typeof window.mapboxgl.Marker !== "function") {
-      setPreviewPinStatus("Preview pin waiting for the map. Review and save to make active.", "pending");
+      setPreviewPinStatus("Preview Location - not saved yet. Waiting for the map.", "pending");
       schedulePreviewMarkerRetry(latitude, longitude);
       return;
     }
@@ -436,7 +508,7 @@
     }
 
     state.previewMarker.setLngLat([Number(longitude), Number(latitude)]).addTo(map);
-    setPreviewPinStatus("Preview pin placed. Drag pin to adjust location. Review and save to make active.", "success");
+    setPreviewPinStatus("Preview Location - not saved yet. Drag pin to adjust location; save to make active.", "success");
     if (shouldFocus) {
       focusPreviewLocation(latitude, longitude);
     }
@@ -730,6 +802,7 @@
     updateConfig(state.activeLocation);
     updateDisplay();
     populateForm(state.activeLocation);
+    placeActiveMarker(state.activeLocation);
     return state.activeLocation;
   }
 
@@ -769,6 +842,7 @@
       updateDisplay();
       populateForm(location);
       moveMap(location);
+      placeActiveMarker(location);
       clearPreviewMarker();
       await refreshAlerts();
       setMessage("Location saved.", "success");
@@ -793,6 +867,7 @@
       abortPendingSearch();
       clearNwsPreview();
       clearPreviewMarker();
+      placeActiveMarker(state.activeLocation);
       clearSuggestions();
       setSelectedSuggestionPreview(null);
       if (getSearchInput()) {
@@ -840,6 +915,7 @@
     state.activeLocation = getConfig().activeLocation || null;
     updateDisplay();
     populateForm(state.activeLocation);
+    placeActiveMarker(state.activeLocation);
     bindEvents();
 
     try {
@@ -858,6 +934,9 @@
     },
     getActiveLocation: function () {
       return state.activeLocation;
+    },
+    placeActiveMarker: function () {
+      placeActiveMarker(state.activeLocation);
     },
   };
 
