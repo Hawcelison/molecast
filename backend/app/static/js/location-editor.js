@@ -4,7 +4,12 @@
     status: null,
     isOpen: false,
     isSaving: false,
+    isSavingDraft: false,
     isLookingUpZip: false,
+    savedLocations: [],
+    isLoadingSavedLocations: false,
+    savedLocationActionId: null,
+    draftSourceMethod: null,
     searchTimer: null,
     searchSlowTimer: null,
     searchRequestId: 0,
@@ -100,6 +105,15 @@
     status.textContent = text || "";
     status.dataset.state = type || "";
     status.hidden = !text;
+  }
+
+  function setSavedStatus(text, type) {
+    const status = getElement("location-saved-status");
+    if (!status) {
+      return;
+    }
+    status.textContent = text || "";
+    status.dataset.state = type || "";
   }
 
   function previewPinStatusText(prefix) {
@@ -200,8 +214,10 @@
       stopMapPinPlacement({ preserveStatus: true });
     }
     if (isOpen) {
+      state.draftSourceMethod = null;
       populateForm(state.activeLocation);
       setSearchStatus("Select a location, then review and save.", "");
+      loadSavedLocations({ silent: state.savedLocations.length > 0 });
       getSearchInput()?.focus();
     }
   }
@@ -269,6 +285,9 @@
         payload[name] = name === "state" ? value.toUpperCase() : value;
       }
     });
+    if (state.draftSourceMethod) {
+      payload.source_method = state.draftSourceMethod;
+    }
 
     return { payload };
   }
@@ -282,11 +301,13 @@
       name: label,
       city: lookup.city || "",
       county: lookup.county || "",
+      county_fips: lookup.county_fips || "",
       state: lookup.state || "",
       zip_code: zipCode,
       latitude: lookup.latitude,
       longitude: lookup.longitude,
       default_zoom: lookup.default_zoom || 9,
+      source_method: "zip",
     };
   }
 
@@ -311,6 +332,7 @@
       latitude: suggestion.latitude,
       longitude: suggestion.longitude,
       default_zoom: suggestion.default_zoom || parseNumberField("default_zoom") || 9,
+      source_method: suggestion.kind || "manual",
     };
   }
 
@@ -385,6 +407,145 @@
       return "Unavailable";
     }
     return String(value);
+  }
+
+  function formatSavedLocationDetail(location) {
+    const cityState = [location.city, location.state].filter(Boolean).join(", ");
+    const locationText = [cityState, location.zip_code].filter(Boolean).join(" ").trim();
+    if (locationText) {
+      return locationText;
+    }
+    if (validCoordinate(location.latitude, location.longitude)) {
+      return `${formatCoordinate(location.latitude)}, ${formatCoordinate(location.longitude)}`;
+    }
+    return "Location details unavailable";
+  }
+
+  function formatLastUsed(value) {
+    if (!value) {
+      return "";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+    return `Last used ${date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })}`;
+  }
+
+  function isSavedLocationActive(location) {
+    if (location.is_primary) {
+      return true;
+    }
+    return Boolean(state.activeLocation && Number(location.id) === Number(state.activeLocation.id));
+  }
+
+  function setSavedActionButtonsDisabled(isDisabled) {
+    const buttons = getElement("location-saved-list")?.querySelectorAll("button") || [];
+    buttons.forEach(function (button) {
+      button.disabled = isDisabled;
+    });
+    const saveDraftButton = getElement("location-save-draft");
+    const refreshButton = getElement("location-saved-refresh");
+    if (saveDraftButton) {
+      saveDraftButton.disabled = isDisabled || state.isSavingDraft;
+    }
+    if (refreshButton) {
+      refreshButton.disabled = isDisabled || state.isLoadingSavedLocations;
+    }
+  }
+
+  function renderSavedLocations() {
+    const list = getElement("location-saved-list");
+    if (!list) {
+      return;
+    }
+    list.replaceChildren();
+    const locations = Array.isArray(state.savedLocations) ? state.savedLocations : [];
+    if (state.isLoadingSavedLocations) {
+      setSavedStatus("Loading saved locations...", "pending");
+      return;
+    }
+    if (locations.length === 0) {
+      setSavedStatus("No saved locations yet.", "");
+      return;
+    }
+
+    locations.forEach(function (location) {
+      const row = document.createElement("div");
+      row.className = "location-editor__saved-row";
+      row.dataset.locationId = String(location.id);
+      row.setAttribute("role", "listitem");
+
+      const main = document.createElement("div");
+      main.className = "location-editor__saved-main";
+
+      const titleLine = document.createElement("div");
+      titleLine.className = "location-editor__saved-title-line";
+
+      const name = document.createElement("span");
+      name.className = "location-editor__saved-name";
+      name.textContent = formatLocation(location);
+      titleLine.append(name);
+
+      const isActive = isSavedLocationActive(location);
+      if (isActive) {
+        const badge = document.createElement("span");
+        badge.className = "location-editor__saved-badge";
+        badge.textContent = "Active";
+        titleLine.append(badge);
+      }
+
+      const detail = document.createElement("div");
+      detail.className = "location-editor__saved-detail";
+      detail.textContent = formatSavedLocationDetail(location);
+
+      main.append(titleLine, detail);
+
+      const lastUsed = formatLastUsed(location.last_used_at);
+      if (lastUsed) {
+        const meta = document.createElement("div");
+        meta.className = "location-editor__saved-meta";
+        meta.textContent = lastUsed;
+        main.append(meta);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "location-editor__saved-row-actions";
+
+      if (!isActive) {
+        const activateButton = document.createElement("button");
+        activateButton.className = "location-panel__button location-panel__button--primary";
+        activateButton.type = "button";
+        activateButton.dataset.action = "activate";
+        activateButton.textContent = "Activate";
+        activateButton.disabled = state.savedLocationActionId === location.id;
+        activateButton.addEventListener("click", function () {
+          activateSavedLocation(location.id);
+        });
+
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "location-panel__button";
+        deleteButton.type = "button";
+        deleteButton.dataset.action = "delete";
+        deleteButton.textContent = "Delete";
+        deleteButton.disabled = state.savedLocationActionId === location.id;
+        deleteButton.addEventListener("click", function () {
+          deleteSavedLocation(location);
+        });
+
+        actions.append(activateButton, deleteButton);
+      }
+
+      row.append(main, actions);
+      list.append(row);
+    });
+
+    setSavedStatus(`${locations.length} saved location${locations.length === 1 ? "" : "s"}.`, "");
+    setSavedActionButtonsDisabled(Boolean(state.savedLocationActionId));
   }
 
   function setFieldValue(name, value) {
@@ -517,6 +678,9 @@
 
   function applyPreviewCoordinate(latitude, longitude, options) {
     const previewOptions = options || {};
+    if (previewOptions.sourceMethod) {
+      state.draftSourceMethod = previewOptions.sourceMethod;
+    }
     updateLatLonFields(latitude, longitude);
     const markerPlaced = placePreviewMarker(latitude, longitude, {
       shouldFocus: previewOptions.shouldFocus !== false,
@@ -543,6 +707,7 @@
       shouldFocus: false,
       statusText: previewPinStatusText(),
       message: "Preview pin moved. Review and save to apply.",
+      sourceMethod: "map_pick",
     });
   }
 
@@ -698,6 +863,7 @@
         shouldFocus: false,
         statusText: previewPinStatusText(),
         message: "Preview pin placed. Review and save to apply.",
+        sourceMethod: "map_pick",
       });
     };
     state.mapPlacementKeyHandler = function (event) {
@@ -734,6 +900,7 @@
       shouldFocus: false,
       statusText: previewPinStatusText(),
       message: "Map center selected. Review and save to apply.",
+      sourceMethod: "map_pick",
     });
   }
 
@@ -844,6 +1011,7 @@
     stopMapPinPlacement({ preserveStatus: true });
     applyPreviewCoordinate(suggestion.latitude, suggestion.longitude, {
       statusText: previewPinStatusText(),
+      sourceMethod: suggestion.kind || "manual",
     });
     setSearchStatus("Select a location, then review and save.", "success");
     setMessage("Search populated the editor. Preview only; review and save to apply.", "success");
@@ -860,7 +1028,20 @@
     }
     if (!response.ok) {
       const detail = body && (body.detail || body.message);
-      throw new Error(typeof detail === "string" ? detail : `Request failed with ${response.status}.`);
+      if (typeof detail === "string") {
+        throw new Error(detail);
+      }
+      if (Array.isArray(detail)) {
+        const messages = detail
+          .map(function (entry) {
+            return entry && typeof entry.msg === "string" ? entry.msg : "";
+          })
+          .filter(Boolean);
+        if (messages.length > 0) {
+          throw new Error(messages.join(" "));
+        }
+      }
+      throw new Error(`Request failed with ${response.status}.`);
     }
     return body;
   }
@@ -973,6 +1154,186 @@
     }
   }
 
+  async function applyActiveLocation(location, options) {
+    const settings = options || {};
+    state.activeLocation = location;
+    state.status = {
+      active_location: location,
+      nws_metadata_status: location.nws_points_updated_at ? "current" : "missing",
+    };
+    updateConfig(location);
+    updateDisplay();
+    if (settings.populateForm !== false) {
+      populateForm(location);
+      state.draftSourceMethod = null;
+    }
+    if (settings.moveMap !== false) {
+      moveMap(location);
+    }
+    placeActiveMarker(location);
+    if (settings.clearPreview !== false) {
+      clearPreviewMarker();
+    }
+    renderSavedLocations();
+    if (settings.refreshAlerts !== false) {
+      await refreshAlerts();
+    }
+  }
+
+  async function loadSavedLocations(options) {
+    const settings = options || {};
+    if (state.isLoadingSavedLocations) {
+      return state.savedLocations;
+    }
+    let loadFailed = false;
+    state.isLoadingSavedLocations = true;
+    if (!settings.silent) {
+      setSavedStatus("Loading saved locations...", "pending");
+    }
+    renderSavedLocations();
+    try {
+      const locations = await fetchJson("/api/locations");
+      state.savedLocations = Array.isArray(locations) ? locations : [];
+      renderSavedLocations();
+      return state.savedLocations;
+    } catch (error) {
+      loadFailed = true;
+      setSavedStatus(error.message || "Failed to load saved locations.", "error");
+      return state.savedLocations;
+    } finally {
+      state.isLoadingSavedLocations = false;
+      if (loadFailed) {
+        setSavedActionButtonsDisabled(false);
+      } else {
+        renderSavedLocations();
+      }
+    }
+  }
+
+  function buildSavedLocationPayload(payload) {
+    const city = payload.city || "Unknown";
+    const stateCode = payload.state || "NA";
+    const county = payload.county || "Unknown";
+    const zipCode = payload.zip_code || "";
+    const cityState = [city !== "Unknown" ? city : "", stateCode !== "NA" ? stateCode : ""]
+      .filter(Boolean)
+      .join(", ");
+    const label = payload.label || payload.name || [cityState, zipCode].filter(Boolean).join(" ").trim()
+      || `${formatCoordinate(payload.latitude)}, ${formatCoordinate(payload.longitude)}`;
+
+    return {
+      label: label,
+      name: payload.name || label,
+      city: city,
+      county: county,
+      state: stateCode,
+      zip_code: zipCode,
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      default_zoom: payload.default_zoom,
+      source_method: payload.source_method || state.draftSourceMethod || "manual",
+      is_primary: false,
+      activate: false,
+    };
+  }
+
+  async function saveDraftLocation() {
+    if (state.isSavingDraft) {
+      return;
+    }
+    const result = collectPayload();
+    if (result.errors) {
+      setSavedStatus(result.errors.join(" "), "error");
+      return;
+    }
+
+    const saveDraftButton = getElement("location-save-draft");
+    state.isSavingDraft = true;
+    if (saveDraftButton) {
+      saveDraftButton.disabled = true;
+    }
+    setSavedStatus("Saving draft to saved locations...", "pending");
+
+    try {
+      const createdLocation = await fetchJson("/api/locations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(buildSavedLocationPayload(result.payload)),
+      });
+      await loadSavedLocations({ silent: true });
+      setSavedStatus(`Saved ${formatLocation(createdLocation)}.`, "success");
+    } catch (error) {
+      setSavedStatus(error.message || "Draft could not be saved.", "error");
+    } finally {
+      state.isSavingDraft = false;
+      if (saveDraftButton) {
+        saveDraftButton.disabled = false;
+      }
+      setSavedActionButtonsDisabled(Boolean(state.savedLocationActionId));
+    }
+  }
+
+  async function activateSavedLocation(locationId) {
+    if (state.savedLocationActionId) {
+      return;
+    }
+    let finalStatus = null;
+    state.savedLocationActionId = locationId;
+    setSavedStatus("Activating saved location...", "pending");
+    renderSavedLocations();
+    try {
+      const location = await fetchJson(`/api/locations/${encodeURIComponent(locationId)}/activate`, {
+        method: "POST",
+      });
+      await applyActiveLocation(location, { clearPreview: true });
+      await loadSavedLocations({ silent: true });
+      finalStatus = { text: `Activated ${formatLocation(location)}.`, type: "success" };
+      setMessage("Saved location activated.", "success");
+    } catch (error) {
+      finalStatus = { text: error.message || "Saved location could not be activated.", type: "error" };
+    } finally {
+      state.savedLocationActionId = null;
+      renderSavedLocations();
+      if (finalStatus) {
+        setSavedStatus(finalStatus.text, finalStatus.type);
+      }
+    }
+  }
+
+  async function deleteSavedLocation(location) {
+    if (isSavedLocationActive(location)) {
+      setSavedStatus("Active location cannot be deleted. Activate another saved location first.", "warning");
+      return;
+    }
+    if (!window.confirm(`Delete ${formatLocation(location)} from saved locations?`)) {
+      return;
+    }
+    let finalStatus = null;
+    state.savedLocationActionId = location.id;
+    setSavedStatus("Deleting saved location...", "pending");
+    renderSavedLocations();
+    try {
+      await fetchJson(`/api/locations/${encodeURIComponent(location.id)}`, {
+        method: "DELETE",
+      });
+      await loadSavedLocations({ silent: true });
+      finalStatus = { text: "Saved location deleted.", type: "success" };
+    } catch (error) {
+      const message = /active location/i.test(error.message)
+        ? "Active location cannot be deleted. Activate another saved location first."
+        : error.message || "Saved location could not be deleted.";
+      finalStatus = { text: message, type: "error" };
+    } finally {
+      state.savedLocationActionId = null;
+      renderSavedLocations();
+      if (finalStatus) {
+        setSavedStatus(finalStatus.text, finalStatus.type);
+      }
+    }
+  }
+
   function requestNwsPreview(latitude, longitude) {
     if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
       setNwsPreview("NWS preview unavailable for this selection.", "warning");
@@ -1065,6 +1426,7 @@
       stopMapPinPlacement({ preserveStatus: true });
       applyPreviewCoordinate(location.latitude, location.longitude, {
         statusText: previewPinStatusText(),
+        sourceMethod: "zip",
       });
       setSearchStatus("Select a location, then review and save.", "");
       setMessage("ZIP lookup populated the editor. Preview only; review and save to apply.", "success");
@@ -1087,7 +1449,9 @@
     updateConfig(state.activeLocation);
     updateDisplay();
     populateForm(state.activeLocation);
+    state.draftSourceMethod = null;
     placeActiveMarker(state.activeLocation);
+    renderSavedLocations();
     return state.activeLocation;
   }
 
@@ -1119,18 +1483,8 @@
         },
         body: JSON.stringify(result.payload),
       });
-      state.activeLocation = location;
-      state.status = {
-        active_location: location,
-        nws_metadata_status: location.nws_points_updated_at ? "current" : "missing",
-      };
-      updateConfig(location);
-      updateDisplay();
-      populateForm(location);
-      moveMap(location);
-      placeActiveMarker(location);
-      clearPreviewMarker();
-      await refreshAlerts();
+      await applyActiveLocation(location, { clearPreview: true });
+      await loadSavedLocations({ silent: true });
       setMessage("Location saved.", "success");
     } catch (error) {
       setMessage(error.message || "Location could not be saved.", "error");
@@ -1154,6 +1508,7 @@
       abortPendingSearch();
       clearNwsPreview();
       clearPreviewMarker();
+      state.draftSourceMethod = null;
       placeActiveMarker(state.activeLocation);
       clearSuggestions();
       setSelectedSuggestionPreview(null);
@@ -1167,6 +1522,10 @@
     getElement("location-zip-lookup")?.addEventListener("click", lookupZipCode);
     getElement("location-place-pin")?.addEventListener("click", startMapPinPlacement);
     getElement("location-use-map-center")?.addEventListener("click", useMapCenterForPreview);
+    getElement("location-save-draft")?.addEventListener("click", saveDraftLocation);
+    getElement("location-saved-refresh")?.addEventListener("click", function () {
+      loadSavedLocations();
+    });
     getElement("location-editor-form")?.addEventListener("submit", saveLocation);
     getSearchInput()?.addEventListener("input", queueLocationSearch);
     getSearchInput()?.addEventListener("keydown", function (event) {
@@ -1209,9 +1568,11 @@
 
     try {
       await refresh();
+      await loadSavedLocations();
     } catch (_error) {
       updateDisplay();
       setMessage("Location status is unavailable.", "error");
+      setSavedStatus("Failed to load saved locations.", "error");
     }
   }
 
@@ -1227,6 +1588,7 @@
     placeActiveMarker: function () {
       placeActiveMarker(state.activeLocation);
     },
+    refreshSavedLocations: loadSavedLocations,
   };
 
   document.addEventListener("DOMContentLoaded", initialize);

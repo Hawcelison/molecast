@@ -12,7 +12,7 @@
 <script src="/static/js/modules/alert-icons.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-audio.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-banners.js?v=alert-ui-20260501b" defer></script>
-<script src="/static/js/location-editor.js?v=zcta-null-metadata-20260503" defer></script>
+<script src="/static/js/location-editor.js?v=saved-locations-panel-20260503" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -63,6 +63,17 @@
           </div>
           <p id="location-preview-pin-status" class="location-editor__pin-status" role="status" aria-live="polite" hidden></p>
         </div>
+        <section class="location-editor__saved" aria-labelledby="location-saved-title">
+          <div class="location-editor__saved-header">
+            <h2 id="location-saved-title">Saved locations</h2>
+            <div class="location-editor__saved-actions">
+              <button id="location-save-draft" class="location-panel__button" type="button">Save to saved locations</button>
+              <button id="location-saved-refresh" class="location-panel__button" type="button">Refresh</button>
+            </div>
+          </div>
+          <p id="location-saved-status" class="location-editor__saved-status" role="status" aria-live="polite">Loading saved locations...</p>
+          <div id="location-saved-list" class="location-editor__saved-list" role="list"></div>
+        </section>
         <div class="location-editor__grid">
           <label>
             Label

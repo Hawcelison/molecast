@@ -2,6 +2,17 @@
 
 Molecast release notes will be tracked here.
 
+## 0.6.1 - 2026-05-03
+
+- Added the frontend saved-location panel inside the existing active location editor.
+- Loaded saved locations through `GET /api/locations` and showed active status, label/name, city/state/ZIP, and optional last-used details.
+- Added `Save to saved locations` for saving the current draft through `POST /api/locations` without activating it.
+- Added saved-location activation through `POST /api/locations/{id}/activate` while reusing the active Save post-update behavior for config, map recentering, active marker updates, and alert refresh.
+- Added confirmed inactive saved-location deletion through `DELETE /api/locations/{id}`.
+- Hid Delete for the active saved location and handled active-delete `409 Conflict` responses with friendly UI messaging.
+- Preserved ZIP lookup, city/address search, map-pick preview, explicit Save behavior, radar, alert refresh, and test-alert fixture hygiene.
+- Made no backend API changes in this release.
+
 ## 0.6.0 - 2026-05-03
 
 - Added the backend/API foundation for saved locations using the existing `locations` table.
