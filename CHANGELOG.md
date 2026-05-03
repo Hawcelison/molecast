@@ -2,6 +2,14 @@
 
 Molecast release notes will be tracked here.
 
+## 0.3.2 - 2026-05-03
+
+- Improved `/health` readiness behavior to include database readiness.
+- Stabilized active location editor preview behavior.
+- Prevented intentional preview cancellation from surfacing as failed or user-facing errors.
+- Improved test alert editor hygiene so opening and validation flows do not dirty `test/alerts_test.json`.
+- Added and updated tests for health readiness and test alert loader hygiene.
+
 ## 0.3.1 - 2026-05-02
 
 - Improved active location autocomplete status feedback while searches are running.
