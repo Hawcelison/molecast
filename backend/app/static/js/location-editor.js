@@ -275,13 +275,14 @@
 
   function buildZipLocation(lookup) {
     const zipCode = lookup.zip_code || lookup.zip || "";
-    const label = `${lookup.city}, ${lookup.state} ${zipCode}`.trim();
+    const cityState = [lookup.city, lookup.state].filter(Boolean).join(", ");
+    const label = [cityState, zipCode].filter(Boolean).join(" ").trim() || "Selected ZIP";
     return {
       label: label,
       name: label,
-      city: lookup.city,
-      county: lookup.county,
-      state: lookup.state,
+      city: lookup.city || "",
+      county: lookup.county || "",
+      state: lookup.state || "",
       zip_code: zipCode,
       latitude: lookup.latitude,
       longitude: lookup.longitude,

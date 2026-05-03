@@ -18,9 +18,9 @@ class InvalidZipCodeError(ValueError):
 
 class ZipCodeLookupResult(BaseModel):
     zip_code: str = Field(pattern=r"^\d{5}$")
-    city: str
-    state: str
-    county: str
+    city: str | None = None
+    state: str | None = None
+    county: str | None = None
     latitude: float
     longitude: float
     default_zoom: int = Field(default=9, ge=0, le=22)
@@ -52,7 +52,7 @@ class SQLiteZipCodeProvider:
             zip_code=record.zip_code,
             city=record.primary_city,
             state=record.state,
-            county=record.county or "",
+            county=record.county,
             latitude=record.latitude,
             longitude=record.longitude,
             default_zoom=record.default_zoom,

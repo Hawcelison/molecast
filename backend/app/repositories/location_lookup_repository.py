@@ -12,8 +12,8 @@ EARTH_RADIUS_MILES = 3958.7613
 @dataclass(frozen=True)
 class ZipLocationRecord:
     zip_code: str
-    primary_city: str
-    state: str
+    primary_city: str | None
+    state: str | None
     county: str | None
     county_fips: str | None
     latitude: float

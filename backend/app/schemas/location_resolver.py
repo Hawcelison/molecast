@@ -9,8 +9,8 @@ class LocationSearchSuggestion(BaseModel):
     kind: Literal["zip", "city", "address"]
     label: str
     zip: str | None = None
-    city: str
-    state: str
+    city: str | None = None
+    state: str | None = None
     county: str | None = None
     latitude: float
     longitude: float

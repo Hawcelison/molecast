@@ -1,18 +1,29 @@
 {
-  "checksum_sha256": "bcecf1104e668dcdf55d3a5e9fd79d060a2c1752fb28a338c2e71456be1720a1",
+  "checksum_sha256": "cc025544de005fe6b3a8cdb02ce482e78e70ef2d5016a36cae5d556f4cb1d0b3",
   "dataset_version": "phase-1-seed",
   "future_source_license": null,
-  "generated_at": "2026-05-03T09:11:30.271790+00:00",
-  "imported_at": "2026-05-03T09:11:30.271790+00:00",
+  "generated_at": "2026-05-03T10:44:26.162667+00:00",
+  "imported_at": "2026-05-03T10:44:26.162667+00:00",
   "notes": [
-    "Phase 1 lookup database is seeded from backend/app/data/zip_codes.json for current development parity.",
-    "Future imports should replace this seed with licensed nationwide ZIP/city source data."
+    "Seed JSON rows preserve curated city/state/county metadata for current development ZIPs.",
+    "Census Gazetteer ZCTA rows provide broad offline ZIP-style coordinate coverage.",
+    "ZCTAs are approximate Census geographies, not USPS ZIP Code validation data.",
+    "Not every valid USPS ZIP Code is represented by a Census ZCTA."
   ],
   "row_counts": {
     "city_locations": 2,
-    "zip_locations": 2
+    "zip_locations": 33792
   },
   "source_name": "molecast-seed-zip-codes-json",
   "source_version": "phase-1-seed",
-  "source_year": null
+  "source_year": null,
+  "zcta_source": {
+    "checksum_sha256": "51516a4283bab5cd2376eec75609ddc4b363a18297e8adeeaac7b03cf7c84dbe",
+    "dataset_version": "2025_Gazetteer_ZCTA",
+    "download_url": "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2025_Gazetteer/2025_Gaz_zcta_national.zip",
+    "path": "data/reference/census/2025_Gaz_zcta_national.zip",
+    "source_name": "census_gazetteer_zcta",
+    "source_version": "2025_Gaz_zcta_national",
+    "source_year": "2025"
+  }
 }

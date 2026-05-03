@@ -93,9 +93,9 @@ class LocationDeleteResponse(BaseModel):
 class ZipLookupResponse(BaseModel):
     zip: str
     zip_code: str
-    city: str
-    state: str
-    county: str
+    city: str | None = None
+    state: str | None = None
+    county: str | None = None
     latitude: float
     longitude: float
     default_zoom: int = Field(default=9, ge=0, le=22)

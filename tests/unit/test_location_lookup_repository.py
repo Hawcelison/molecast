@@ -123,6 +123,64 @@ def test_importer_supports_csv_source_and_sentinel_validation(tmp_path: Path) ->
     assert record.confidence == "zcta"
 
 
+def test_importer_merges_seed_json_with_census_zcta_gazetteer(tmp_path: Path) -> None:
+    source_json = tmp_path / "zip_codes.json"
+    zcta_source = tmp_path / "gaz_zcta.txt"
+    output_db = tmp_path / "location_lookup.sqlite3"
+    manifest_path = tmp_path / "location_lookup_manifest.json"
+    _write_seed_json(source_json)
+    zcta_source.write_text(
+        "\n".join(
+            [
+                "GEOID|GEOIDFQ|ALAND|AWATER|ALAND_SQMI|AWATER_SQMI|INTPTLAT|INTPTLONG",
+                "10001|860Z200US10001|1|0|0.001|0|40.750649|-73.997298",
+                "49002|860Z200US49002|1|0|0.001|0|42.197202|-85.555543",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    manifest = import_location_lookup(
+        source_json=source_json,
+        output_db=output_db,
+        manifest_path=manifest_path,
+        source_name="test-seed",
+        source_year=None,
+        source_version="seed-v1",
+        zcta_source_path=zcta_source,
+        zcta_source_year="2025",
+        zcta_source_version="2025_Gaz_zcta_national",
+        zcta_dataset_version="2025_Gazetteer_ZCTA",
+        sentinel_zip_codes=["49002", "49005", "10001"],
+    )
+    repository = LocationLookupRepository(output_db)
+    seed_overlap = repository.lookup_zip("49002")
+    zcta_only = repository.lookup_zip("10001")
+
+    assert manifest["row_counts"]["zip_locations"] == 3
+    assert manifest["row_counts"]["city_locations"] == 2
+    assert seed_overlap is not None
+    assert seed_overlap.primary_city == "Portage"
+    assert seed_overlap.state == "MI"
+    assert seed_overlap.county == "Kalamazoo"
+    assert seed_overlap.latitude == 42.197202
+    assert seed_overlap.longitude == -85.555543
+    assert seed_overlap.source == "test-seed+census_gazetteer_zcta"
+    assert seed_overlap.location_type == "zip_zcta"
+    assert seed_overlap.is_zcta is True
+    assert seed_overlap.confidence == "seed_metadata+approximate_zcta"
+    assert zcta_only is not None
+    assert zcta_only.primary_city is None
+    assert zcta_only.state is None
+    assert zcta_only.county is None
+    assert zcta_only.source == "census_gazetteer_zcta"
+    assert zcta_only.source_year == "2025"
+    assert zcta_only.location_type == "zcta"
+    assert zcta_only.is_zcta is True
+    assert zcta_only.confidence == "approximate"
+
+
 def test_repository_returns_exact_zip_record(tmp_path: Path) -> None:
     source_json = tmp_path / "zip_codes.json"
     output_db = tmp_path / "location_lookup.sqlite3"

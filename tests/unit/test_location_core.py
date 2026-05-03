@@ -220,6 +220,34 @@ def test_zip_lookup_returns_local_location_data() -> None:
     assert lookup.default_zoom == 9
 
 
+def test_zip_lookup_preserves_seed_metadata_for_49005() -> None:
+    lookup = locations_route.lookup_zip_code("49005")
+
+    assert lookup.zip == "49005"
+    assert lookup.zip_code == "49005"
+    assert lookup.city == "Kalamazoo"
+    assert lookup.state == "MI"
+    assert lookup.county == "Kalamazoo"
+    assert lookup.location_type == "zip"
+    assert lookup.is_zcta is False
+
+
+def test_zip_lookup_returns_non_michigan_zcta_with_partial_metadata() -> None:
+    lookup = locations_route.lookup_zip_code("90210")
+
+    assert lookup.zip_code == "90210"
+    assert lookup.city is None
+    assert lookup.state is None
+    assert lookup.county is None
+    assert lookup.latitude == 34.100517
+    assert lookup.longitude == -118.41463
+    assert lookup.source == "census_gazetteer_zcta"
+    assert lookup.source_year == "2025"
+    assert lookup.location_type == "zcta"
+    assert lookup.is_zcta is True
+    assert lookup.confidence == "approximate"
+
+
 def test_legacy_zip_lookup_route_returns_local_location_data() -> None:
     lookup = locations_route.lookup_zip_code_legacy("49005")
 
@@ -278,6 +306,7 @@ def test_zip_lookup_does_not_modify_test_alert_fixture() -> None:
     before = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
 
     locations_route.lookup_zip_code("49002")
+    locations_route.lookup_zip_code("10001")
 
     after = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
     assert after == before

@@ -54,8 +54,8 @@ def test_search_endpoint_returns_zip_prefix_results() -> None:
     response = locations_route.search_locations(q="490", limit=8, search_type=None)
 
     assert response.query == "490"
-    assert response.count == 2
-    assert [result.ref for result in response.results] == ["zip:49002", "zip:49005"]
+    assert response.count >= 2
+    assert {"zip:49002", "zip:49005"}.issubset({result.ref for result in response.results})
     assert all(result.kind == "zip" for result in response.results)
 
 
@@ -99,7 +99,7 @@ def test_search_endpoint_supports_city_state_query() -> None:
 def test_search_endpoint_type_zip_only_filters_results() -> None:
     response = locations_route.search_locations(q="490", limit=8, search_type="zip")
 
-    assert response.count == 2
+    assert response.count >= 2
     assert {result.kind for result in response.results} == {"zip"}
 
 
@@ -172,7 +172,7 @@ def test_search_service_reports_address_provider_warning_without_breaking_local_
 
 
 def test_search_endpoint_limit_is_applied() -> None:
-    response = locations_route.search_locations(q="490", limit=1, search_type=None)
+    response = locations_route.search_locations(q="49002", limit=1, search_type=None)
 
     assert response.count == 1
     assert response.results[0].ref == "zip:49002"
@@ -273,9 +273,39 @@ def test_existing_zip_lookup_routes_remain_compatible() -> None:
     assert locations_route.lookup_zip_code("49005").city == "Kalamazoo"
 
 
+def test_zip_lookup_returns_imported_zcta_with_partial_metadata() -> None:
+    response = locations_route.lookup_zip_code("10001")
+
+    assert response.zip_code == "10001"
+    assert response.city is None
+    assert response.state is None
+    assert response.county is None
+    assert response.latitude == 40.750649
+    assert response.longitude == -73.997298
+    assert response.source == "census_gazetteer_zcta"
+    assert response.source_year == "2025"
+    assert response.location_type == "zcta"
+    assert response.is_zcta is True
+    assert response.confidence == "approximate"
+
+
+def test_search_endpoint_returns_zcta_only_zip_without_metadata_crash() -> None:
+    response = locations_route.search_locations(q="10001", limit=8, search_type="zip")
+
+    assert response.count >= 1
+    result = response.results[0]
+    assert result.ref == "zip:10001"
+    assert result.label == "10001 - ZCTA centroid"
+    assert result.city is None
+    assert result.state is None
+    assert result.county is None
+    assert result.latitude == 40.750649
+    assert result.longitude == -73.997298
+
+
 def test_zip_lookup_route_response_includes_dataset_metadata() -> None:
     response = locations_route.lookup_zip_code("49002")
 
-    assert response.source == "molecast-seed-zip-codes-json"
-    assert response.dataset_version == "phase-1-seed"
+    assert response.source == "molecast-seed-zip-codes-json+census_gazetteer_zcta"
+    assert response.dataset_version == "phase-1-seed+2025_Gazetteer_ZCTA"
     assert response.imported_at

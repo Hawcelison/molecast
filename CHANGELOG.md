@@ -2,6 +2,16 @@
 
 Molecast release notes will be tracked here.
 
+## 0.5.1 - 2026-05-03
+
+- Imported public Census 2025 Gazetteer ZCTA data into the local ZIP lookup database.
+- Added Census source data under `data/reference/census/`.
+- Rebuilt `backend/app/data/location_lookup.sqlite3` from seed ZIPs plus Census ZCTA data, increasing `zip_locations` from 2 rows to 33,792 rows.
+- Preserved existing `49002` and `49005` seed behavior while adding broad local/offline ZIP/ZCTA coordinate lookup for ZIP-like map centering.
+- Allowed ZCTA-only lookup rows to return null city, state, and county metadata when the Census Gazetteer does not provide those fields.
+- Documented ZCTA limitations: Census approximation, not USPS ZIP validation, and not every USPS ZIP has a ZCTA.
+- Kept address lookup provider-based and kept `test/alerts_test.json` clean.
+
 ## 0.5.0 - 2026-05-03
 
 - Added ZIP lookup metadata foundation for full USA ZIP support.

@@ -190,11 +190,18 @@ def is_address_like_query(query: str) -> bool:
 
 def zip_suggestion(record: ZipLocationRecord) -> LocationSearchSuggestion:
     county = format_county(record.county)
-    county_label = f" - {county}" if county else ""
+    locality = _locality_label(record.primary_city, record.state)
+    label_parts = [record.zip_code]
+    if locality:
+        label_parts.append(locality)
+    elif record.is_zcta:
+        label_parts.append("ZCTA centroid")
+    if county:
+        label_parts.append(county)
     return LocationSearchSuggestion(
         ref=f"zip:{record.zip_code}",
         kind="zip",
-        label=f"{record.zip_code} - {record.primary_city}, {record.state}{county_label}",
+        label=" - ".join(label_parts),
         zip=record.zip_code,
         city=record.primary_city,
         state=record.state,
@@ -248,6 +255,10 @@ def format_county(county: str | None) -> str | None:
     if county.lower().endswith(" county"):
         return county
     return f"{county} County"
+
+
+def _locality_label(city: str | None, state: str | None) -> str:
+    return ", ".join(part for part in [city, state] if part)
 
 
 def slugify_ref(value: str) -> str:

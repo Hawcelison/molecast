@@ -8,6 +8,7 @@ import json
 import math
 import sqlite3
 import tempfile
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,8 +17,8 @@ from typing import Any
 ZIP_LOOKUP_SCHEMA = """
 CREATE TABLE zip_locations (
     zip_code TEXT PRIMARY KEY,
-    primary_city TEXT NOT NULL,
-    state TEXT NOT NULL,
+    primary_city TEXT,
+    state TEXT,
     county TEXT,
     county_fips TEXT,
     latitude REAL NOT NULL,
@@ -69,6 +70,10 @@ def import_location_lookup(
     source_format: str = "auto",
     dataset_version: str | None = None,
     sentinel_zip_codes: list[str] | None = None,
+    zcta_source_path: Path | None = None,
+    zcta_source_year: str | None = None,
+    zcta_source_version: str | None = None,
+    zcta_dataset_version: str | None = None,
 ) -> dict[str, Any]:
     generated_at = datetime.now(UTC).isoformat()
     effective_dataset_version = dataset_version or source_version
@@ -81,6 +86,18 @@ def import_location_lookup(
         generated_at,
         source_format,
     )
+    if zcta_source_path is not None:
+        effective_zcta_dataset_version = zcta_dataset_version or zcta_source_version
+        zcta_records = _load_records(
+            zcta_source_path,
+            "census_gazetteer_zcta",
+            zcta_source_year,
+            zcta_source_version,
+            effective_zcta_dataset_version,
+            generated_at,
+            "census-zcta-gazetteer",
+        )
+        records = _merge_seed_and_zcta_records(records, zcta_records)
     output_db.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -98,6 +115,12 @@ def import_location_lookup(
         "source_year": source_year,
         "source_version": source_version,
         "dataset_version": effective_dataset_version,
+        "zcta_source": _zcta_manifest_source(
+            zcta_source_path,
+            zcta_source_year,
+            zcta_source_version,
+            zcta_dataset_version or zcta_source_version,
+        ),
         "future_source_license": None,
         "generated_at": generated_at,
         "imported_at": generated_at,
@@ -107,8 +130,10 @@ def import_location_lookup(
         },
         "checksum_sha256": checksum,
         "notes": [
-            "Phase 1 lookup database is seeded from backend/app/data/zip_codes.json for current development parity.",
-            "Future imports should replace this seed with licensed nationwide ZIP/city source data.",
+            "Seed JSON rows preserve curated city/state/county metadata for current development ZIPs.",
+            "Census Gazetteer ZCTA rows provide broad offline ZIP-style coordinate coverage.",
+            "ZCTAs are approximate Census geographies, not USPS ZIP Code validation data.",
+            "Not every valid USPS ZIP Code is represented by a Census ZCTA.",
         ],
     }
     _write_manifest(manifest_path, manifest)
@@ -158,6 +183,8 @@ def _load_raw_records(source_path: Path, source_format: str) -> list[dict[str, A
             resolved_format = "csv"
         elif suffix == ".json":
             resolved_format = "json"
+        elif suffix == ".zip":
+            resolved_format = "census-zcta-gazetteer"
         else:
             raise ValueError(f"Cannot infer source format from extension: {source_path}")
 
@@ -169,6 +196,8 @@ def _load_raw_records(source_path: Path, source_format: str) -> list[dict[str, A
             if not reader.fieldnames:
                 raise ValueError("ZIP source CSV must include a header row.")
             return [dict(row) for row in reader]
+    if resolved_format == "census-zcta-gazetteer":
+        return _load_census_zcta_gazetteer_records(source_path)
 
     raise ValueError(f"Unsupported source format: {source_format}")
 
@@ -183,9 +212,11 @@ def _normalize_record(
     index: int,
 ) -> dict[str, Any]:
     zip_code = _normalize_zip(raw_record.get("zip_code") or raw_record.get("zip"), index)
-    primary_city = _required_text(raw_record.get("primary_city") or raw_record.get("city"), "city", index)
-    state = _required_text(raw_record.get("state"), "state", index).upper()
-    if len(state) != 2 or not state.isalpha():
+    primary_city = _optional_text(raw_record.get("primary_city") or raw_record.get("city"))
+    state = _optional_text(raw_record.get("state"))
+    if state:
+        state = state.upper()
+    if state and (len(state) != 2 or not state.isalpha()):
         raise ValueError(f"Record {index} has invalid state: {state!r}")
 
     latitude = _coordinate(raw_record.get("latitude"), "latitude", -90, 90, index)
@@ -211,6 +242,77 @@ def _normalize_record(
         "is_zcta": 1 if _truthy(raw_record.get("is_zcta")) else 0,
         "confidence": _optional_text(raw_record.get("confidence")) or "seed",
     }
+
+
+def _load_census_zcta_gazetteer_records(source_path: Path) -> list[dict[str, Any]]:
+    if source_path.suffix.lower() == ".zip":
+        with zipfile.ZipFile(source_path) as archive:
+            text_members = [name for name in archive.namelist() if name.lower().endswith(".txt")]
+            if len(text_members) != 1:
+                raise ValueError("Census ZCTA Gazetteer ZIP must contain exactly one TXT file.")
+            with archive.open(text_members[0]) as raw_file:
+                text = raw_file.read().decode("utf-8-sig").splitlines()
+    else:
+        text = source_path.read_text(encoding="utf-8-sig").splitlines()
+
+    reader = csv.DictReader(text, delimiter="|")
+    required_fields = {"GEOID", "INTPTLAT", "INTPTLONG"}
+    if not reader.fieldnames or not required_fields.issubset(set(reader.fieldnames)):
+        raise ValueError("Census ZCTA Gazetteer source must include GEOID, INTPTLAT, and INTPTLONG columns.")
+
+    records: list[dict[str, Any]] = []
+    for row in reader:
+        records.append(
+            {
+                "zip_code": row.get("GEOID"),
+                "latitude": row.get("INTPTLAT"),
+                "longitude": row.get("INTPTLONG"),
+                "default_zoom": 9,
+                "location_type": "zcta",
+                "is_zcta": True,
+                "confidence": "approximate",
+            }
+        )
+    return records
+
+
+def _merge_seed_and_zcta_records(
+    seed_records: list[dict[str, Any]],
+    zcta_records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    records_by_zip = {record["zip_code"]: dict(record) for record in seed_records}
+    for zcta_record in zcta_records:
+        existing = records_by_zip.get(zcta_record["zip_code"])
+        if existing is None:
+            records_by_zip[zcta_record["zip_code"]] = dict(zcta_record)
+            continue
+
+        records_by_zip[zcta_record["zip_code"]] = _merge_seed_record_with_zcta(existing, zcta_record)
+
+    return [records_by_zip[zip_code] for zip_code in sorted(records_by_zip)]
+
+
+def _merge_seed_record_with_zcta(seed_record: dict[str, Any], zcta_record: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(seed_record)
+    merged["latitude"] = zcta_record["latitude"]
+    merged["longitude"] = zcta_record["longitude"]
+    merged["source"] = _combine_labels(seed_record.get("source"), zcta_record.get("source"))
+    merged["source_year"] = zcta_record.get("source_year") or seed_record.get("source_year")
+    merged["source_version"] = _combine_labels(seed_record.get("source_version"), zcta_record.get("source_version"))
+    merged["dataset_version"] = _combine_labels(seed_record.get("dataset_version"), zcta_record.get("dataset_version"))
+    merged["imported_at"] = zcta_record.get("imported_at") or seed_record.get("imported_at")
+    merged["location_type"] = "zip_zcta"
+    merged["is_zcta"] = 1
+    merged["confidence"] = "seed_metadata+approximate_zcta"
+    return merged
+
+
+def _combine_labels(left: Any, right: Any) -> str | None:
+    left_text = _optional_text(left)
+    right_text = _optional_text(right)
+    if left_text and right_text and left_text != right_text:
+        return f"{left_text}+{right_text}"
+    return left_text or right_text
 
 
 def _normalize_zip(value: Any, index: int) -> str:
@@ -269,6 +371,7 @@ def _default_zoom(value: Any, index: int) -> int:
 
 
 def _write_database(db_path: Path, records: list[dict[str, Any]]) -> None:
+    city_records = [record for record in records if record.get("primary_city") and record.get("state")]
     with sqlite3.connect(db_path) as connection:
         connection.executescript(ZIP_LOOKUP_SCHEMA)
         connection.executemany(
@@ -341,7 +444,7 @@ def _write_database(db_path: Path, records: list[dict[str, Any]]) -> None:
                 :confidence
             )
             """,
-            records,
+            city_records,
         )
 
 
@@ -394,6 +497,30 @@ def _sha256_file(path: Path) -> str:
     return checksum.hexdigest()
 
 
+def _zcta_manifest_source(
+    zcta_source_path: Path | None,
+    source_year: str | None,
+    source_version: str | None,
+    dataset_version: str | None,
+) -> dict[str, Any] | None:
+    if zcta_source_path is None:
+        return None
+    return {
+        "path": zcta_source_path.as_posix(),
+        "source_name": "census_gazetteer_zcta",
+        "source_year": source_year,
+        "source_version": source_version,
+        "dataset_version": dataset_version,
+        "checksum_sha256": _sha256_file(zcta_source_path),
+        "download_url": (
+            "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/"
+            "2025_Gazetteer/2025_Gaz_zcta_national.zip"
+        )
+        if source_version == "2025_Gaz_zcta_national"
+        else None,
+    }
+
+
 def _parse_args() -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[1]
     default_data_dir = repo_root / "backend" / "app" / "data"
@@ -404,8 +531,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--source-name", default="molecast-seed-zip-codes-json")
     parser.add_argument("--source-year", default=None)
     parser.add_argument("--source-version", default="phase-1-seed")
-    parser.add_argument("--source-format", choices=("auto", "json", "csv"), default="auto")
+    parser.add_argument("--source-format", choices=("auto", "json", "csv", "census-zcta-gazetteer"), default="auto")
     parser.add_argument("--dataset-version", default=None)
+    parser.add_argument("--zcta-input", type=Path, default=None)
+    parser.add_argument("--zcta-source-year", default=None)
+    parser.add_argument("--zcta-source-version", default=None)
+    parser.add_argument("--zcta-dataset-version", default=None)
     parser.add_argument(
         "--sentinel-zip",
         dest="sentinel_zip_codes",
@@ -428,6 +559,10 @@ def main() -> int:
         source_format=args.source_format,
         dataset_version=args.dataset_version,
         sentinel_zip_codes=args.sentinel_zip_codes,
+        zcta_source_path=args.zcta_input,
+        zcta_source_year=args.zcta_source_year,
+        zcta_source_version=args.zcta_source_version,
+        zcta_dataset_version=args.zcta_dataset_version,
     )
     print(
         "Imported "
