@@ -172,6 +172,51 @@ def test_loader_does_not_write_resolved_timestamps_to_test_alert_file(tmp_path, 
     assert alert_file.read_text(encoding="utf-8") == original
 
 
+def test_test_alert_editor_get_does_not_rewrite_fixture(tmp_path, monkeypatch) -> None:
+    alert_file = tmp_path / "alerts_test.json"
+    original = _write_payload(
+        alert_file,
+        _alert(source=None),
+    )
+    monkeypatch.setattr(test_alerts_route, "_resolve_test_alert_file", lambda: alert_file)
+
+    response = test_alerts_route.get_test_alerts()
+
+    assert response["alert_count"] == 1
+    assert response["alerts"][0]["source"] == "test"
+    assert alert_file.read_text(encoding="utf-8") == original
+
+
+def test_test_alert_status_does_not_rewrite_relative_time_fixture(tmp_path, monkeypatch) -> None:
+    alert_file = tmp_path / "alerts_test.json"
+    original = _write_payload(
+        alert_file,
+        _alert(
+            relative_time={
+                "effective_minutes_from_now": -5,
+                "expires_minutes_from_now": 90,
+            },
+        ),
+    )
+    monkeypatch.setattr(test_alerts_route, "_resolve_test_alert_file", lambda: alert_file)
+    monkeypatch.setattr(
+        test_alerts_route,
+        "_active_source_counts",
+        lambda db, refresh=False: {
+            "test": 1,
+            "nws": 0,
+            "total": 1,
+            "refreshed_at": datetime(2026, 4, 29, 18, 0, tzinfo=UTC),
+        },
+    )
+
+    response = test_alerts_route.get_test_alert_status(refresh=True, db=object())
+
+    assert response["test_enabled"] == 1
+    assert response["test_active"] == 1
+    assert alert_file.read_text(encoding="utf-8") == original
+
+
 def test_test_alerts_expose_same_core_dto_fields_as_nws_alerts(tmp_path, monkeypatch) -> None:
     current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
     monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)

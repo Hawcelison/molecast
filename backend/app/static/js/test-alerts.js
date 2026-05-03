@@ -161,6 +161,12 @@
     element.classList.add("is-visible", `editor-form-message--${type || "error"}`);
   }
 
+  function setStagedMessage(message) {
+    const detail = `${message} Click Save to update test/alerts_test.json.`;
+    setStatus(detail);
+    setEditorMessage(detail, "success");
+  }
+
   function formatUtc(date) {
     return date.toISOString().replace(/\.\d{3}Z$/, "Z");
   }
@@ -770,6 +776,7 @@
         if (index === selectedIndex) {
           byId("field-enabled").checked = enabled.checked;
         }
+        setStagedMessage("Enabled state staged.");
       });
 
       const actionsWrap = document.createElement("div");
@@ -1719,12 +1726,16 @@
     payload.alerts.push(makeEmptyAlert());
     selectedIndex = payload.alerts.length - 1;
     const addedId = payload.alerts[selectedIndex].id;
+    renderSelectedAlertForm(payload.alerts[selectedIndex]);
     editorState = {
       originalAlertId: addedId,
       isNewAlert: true,
       currentFormValues: cloneValue(payload.alerts[selectedIndex]),
     };
-    await saveAll({ applyForm: false, keepSelectedId: addedId });
+    byId("field-id").readOnly = false;
+    renderTable();
+    renderSelectedGeometryOnMap(payload.alerts[selectedIndex].geometry);
+    setStagedMessage("New alert staged.");
   }
 
   async function cloneAlert(index) {
@@ -1743,7 +1754,16 @@
     }
     payload.alerts.splice(index + 1, 0, cloned);
     selectedIndex = index + 1;
-    await saveAll({ applyForm: false, keepSelectedId: cloned.id });
+    renderSelectedAlertForm(cloned);
+    editorState = {
+      originalAlertId: cloned.id,
+      isNewAlert: true,
+      currentFormValues: cloneValue(cloned),
+    };
+    byId("field-id").readOnly = false;
+    renderTable();
+    renderSelectedGeometryOnMap(cloned.geometry);
+    setStagedMessage("Clone staged.");
   }
 
   async function deleteAlert(index) {
@@ -1753,7 +1773,13 @@
     }
     payload.alerts.splice(index, 1);
     selectedIndex = Math.min(index, payload.alerts.length - 1);
-    await saveAll({ applyForm: false, fallbackIndex: index });
+    if (selectedIndex >= 0) {
+      selectAlert(selectedIndex);
+    } else {
+      clearSelectedAlertForm();
+      renderTable();
+    }
+    setStagedMessage("Delete staged.");
   }
 
   async function disableSelected() {
@@ -1762,7 +1788,7 @@
     }
     byId("field-enabled").checked = false;
     applyFormToPayload();
-    await saveAll({ applyForm: false, keepSelectedId: currentAlerts()[selectedIndex]?.id });
+    setStagedMessage("Selected alert disabled in the editor.");
   }
 
   async function disableAll() {
@@ -1773,16 +1799,21 @@
     if (selectedIndex >= 0) {
       byId("field-enabled").checked = false;
     }
-    await saveAll({ applyForm: false, keepSelectedId: currentAlerts()[selectedIndex]?.id });
+    renderTable();
+    setStagedMessage("All alerts disabled in the editor.");
   }
 
   async function enableAll() {
-    const confirmed = window.confirm("Enable all test alerts and update their UTC effective/expires windows to active now? Effective will be set to 1 hour before current UTC and expires will be set to 2 hours after current UTC.");
+    const confirmed = window.confirm("Stage all test alerts as active now? Effective will be set to 1 hour before current UTC and expires will be set to 2 hours after current UTC. Click Save afterward to update the file.");
     if (!confirmed) {
       return;
     }
     currentAlerts().forEach(setActiveWindow);
-    await saveAll({ applyForm: false, keepSelectedId: currentAlerts()[selectedIndex]?.id });
+    renderTable();
+    if (selectedIndex >= 0) {
+      renderSelectedAlertForm(currentAlerts()[selectedIndex]);
+    }
+    setStagedMessage("All alerts staged as active.");
   }
 
   async function activateAlertAtIndex(index) {
@@ -1794,7 +1825,8 @@
     }
     setActiveWindow(currentAlerts()[index]);
     selectedIndex = index;
-    await saveAll({ applyForm: false, keepSelectedId: currentAlerts()[index].id });
+    selectAlert(index);
+    setStagedMessage("Alert activation staged.");
   }
 
   async function expireAlertAtIndex(index) {
@@ -1806,7 +1838,8 @@
     }
     expireAlert(currentAlerts()[index]);
     selectedIndex = index;
-    await saveAll({ applyForm: false, keepSelectedId: currentAlerts()[index].id });
+    selectAlert(index);
+    setStagedMessage("Alert expiration staged.");
   }
 
   async function setActiveNow() {
@@ -1818,7 +1851,7 @@
     byId("field-expires").value = formatUtc(new Date(now + after * 60 * 60 * 1000));
     updateLocalTimes();
     applyFormToPayload();
-    await saveAll({ applyForm: false, keepSelectedId: currentAlerts()[selectedIndex]?.id });
+    setStagedMessage("Active window staged.");
   }
 
   function ensureEditableAlert() {

@@ -11,8 +11,8 @@
     searchAbortController: null,
     searchResults: [],
     highlightedSearchIndex: -1,
+    previewTimer: null,
     previewRequestId: 0,
-    previewAbortController: null,
     activeMarker: null,
     activeMarkerRetryTimer: null,
     activeMarkerRetryCount: 0,
@@ -145,10 +145,11 @@
   }
 
   function abortPendingPreview() {
-    if (state.previewAbortController) {
-      state.previewAbortController.abort();
-      state.previewAbortController = null;
+    if (state.previewTimer) {
+      window.clearTimeout(state.previewTimer);
+      state.previewTimer = null;
     }
+    state.previewRequestId += 1;
   }
 
   function clearPreviewMarker() {
@@ -397,7 +398,6 @@
   }
 
   function clearNwsPreview() {
-    state.previewRequestId += 1;
     abortPendingPreview();
     setNwsPreview(null, "");
   }
@@ -916,18 +916,23 @@
     }
   }
 
-  async function requestNwsPreview(latitude, longitude) {
+  function requestNwsPreview(latitude, longitude) {
     if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
       setNwsPreview("NWS preview unavailable for this selection.", "warning");
       return;
     }
 
     abortPendingPreview();
-    state.previewRequestId += 1;
     const requestId = state.previewRequestId;
-    state.previewAbortController = new AbortController();
     setNwsPreview("NWS preview: checking selected point...", "pending");
 
+    state.previewTimer = window.setTimeout(function () {
+      state.previewTimer = null;
+      fetchNwsPreview(latitude, longitude, requestId);
+    }, 150);
+  }
+
+  async function fetchNwsPreview(latitude, longitude, requestId) {
     try {
       const preview = await fetchJson("/api/location/points/preview", {
         method: "POST",
@@ -938,21 +943,16 @@
           latitude: Number(latitude),
           longitude: Number(longitude),
         }),
-        signal: state.previewAbortController.signal,
       });
       if (requestId !== state.previewRequestId) {
         return;
       }
       renderNwsPreview(preview);
     } catch (error) {
-      if (error.name === "AbortError" || requestId !== state.previewRequestId) {
+      if (requestId !== state.previewRequestId) {
         return;
       }
       setNwsPreview(`NWS preview unavailable: ${error.message || "selected point could not be checked."}`, "warning");
-    } finally {
-      if (requestId === state.previewRequestId) {
-        state.previewAbortController = null;
-      }
     }
   }
 
