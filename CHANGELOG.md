@@ -2,6 +2,19 @@
 
 Molecast release notes will be tracked here.
 
+## 0.6.0 - 2026-05-03
+
+- Added the backend/API foundation for saved locations using the existing `locations` table.
+- Added `source_method`, `last_used_at`, and `county_fips` to the location model and API responses.
+- Added safe schema evolution for saved-location metadata, including legacy source backfill and primary-location `last_used_at` backfill.
+- Removed ZIP-code dedupe from saved-location creation so multiple saved locations can share a ZIP when labels or coordinates differ.
+- Preserved `PUT /api/location/active` compatibility while updating the current primary row instead of finding rows by ZIP.
+- Added `PUT /api/locations/{id}` for saved-location updates.
+- Added `POST /api/locations/{id}/activate` for activating a saved location while preserving a single primary location.
+- Hardened `DELETE /api/locations/{id}` so inactive saved locations can be deleted and active deletion returns `409 Conflict`.
+- Updated `GET /api/locations` ordering to return the active location first, then `last_used_at` descending, then label/name.
+- Kept the frontend saved-location panel out of this phase; that compact editor panel is next.
+
 ## 0.5.3 - 2026-05-03
 
 - Added the real Census 2025 county Gazetteer reference file for county FIPS to county/state mapping.

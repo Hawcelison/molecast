@@ -14,7 +14,7 @@ from app.services.zip_lookup_service import (
 )
 
 
-class DefaultLocationDeletionError(ValueError):
+class ActiveLocationDeletionError(ValueError):
     pass
 
 
@@ -51,6 +51,7 @@ def location_to_dict(location: Location, settings: Settings) -> dict[str, Any]:
         "zip_code": location.zip_code,
         "city": location.city,
         "county": location.county,
+        "county_fips": location.county_fips,
         "state": location.state,
         "timezone": location.timezone,
         "default_zoom": location.default_zoom or settings.default_location_zoom,
@@ -61,6 +62,8 @@ def location_to_dict(location: Location, settings: Settings) -> dict[str, Any]:
         "county_zone": location.county_zone,
         "fire_weather_zone": location.fire_weather_zone,
         "nws_points_updated_at": location.nws_points_updated_at,
+        "source_method": location.source_method,
+        "last_used_at": location.last_used_at,
         "is_primary": location.is_primary,
         "using_default": is_default_location(location, settings),
         "created_at": location.created_at,
@@ -84,16 +87,17 @@ def list_locations(db: Session, settings: Settings) -> list[Location]:
 
 def create_location(
     db: Session,
+    settings: Settings,
     location_data: dict[str, Any],
 ) -> Location:
-    existing_location = location_repository.get_location_by_zip_code(
-        db,
-        str(location_data["zip_code"]),
-    )
-    if existing_location:
-        if location_data.get("is_primary"):
-            return location_repository.set_primary_location(db, existing_location)
-        return existing_location
+    activate_location = bool(location_data.pop("activate", False) or location_data.get("is_primary"))
+    location_data = _build_location_data(settings, location_data)
+    refresh_nws_metadata(location_data)
+    if activate_location:
+        location_data["is_primary"] = True
+        location_data["last_used_at"] = datetime.now(UTC)
+    else:
+        location_data["is_primary"] = False
 
     return location_repository.create_location(db, location_data)
 
@@ -107,7 +111,15 @@ def set_active_location(db: Session, location_id: int) -> Location | None:
     if location is None:
         return None
 
-    return location_repository.set_primary_location(db, location)
+    return location_repository.set_primary_location(db, location, last_used_at=datetime.now(UTC))
+
+
+def activate_location(db: Session, settings: Settings, location_id: int) -> Location | None:
+    location = location_repository.get_location_by_id(db, location_id)
+    if location is None:
+        return None
+
+    return activate_location_by_model(db, settings, location)
 
 
 def set_active_location_from_payload(
@@ -117,23 +129,50 @@ def set_active_location_from_payload(
 ) -> Location:
     location_data = _build_location_data(settings, payload_data)
     refresh_nws_metadata(location_data)
+    location_data["is_primary"] = True
+    location_data["last_used_at"] = datetime.now(UTC)
 
-    existing_location = None
-    zip_code = location_data.get("zip_code")
-    if zip_code:
-        existing_location = location_repository.get_location_by_zip_code(db, str(zip_code))
+    active_location = ensure_active_location(db, settings)
+    location = location_repository.update_location(db, active_location, location_data)
+    return location_repository.set_primary_location(db, location, last_used_at=location.last_used_at)
 
-    if existing_location is None:
-        location = location_repository.create_location(db, {**location_data, "is_primary": True})
-    else:
+
+def update_location(
+    db: Session,
+    settings: Settings,
+    location_id: int,
+    payload_data: dict[str, Any],
+) -> Location | None:
+    location = location_repository.get_location_by_id(db, location_id)
+    if location is None:
+        return None
+
+    activate_location = bool(payload_data.pop("is_primary", False))
+    location_data = _location_update_data(settings, location, payload_data)
+    if _coordinates_changed(location, location_data):
+        metadata_location_data = _location_model_to_data(location)
+        metadata_location_data.update(location_data)
+        refresh_nws_metadata(metadata_location_data)
+        location_data.update(_metadata_updates(metadata_location_data))
+
+    if location_data:
+        location = location_repository.update_location(db, location, location_data)
+
+    if activate_location:
+        return activate_location_by_model(db, settings, location)
+    return location
+
+
+def activate_location_by_model(db: Session, settings: Settings, location: Location) -> Location:
+    if location.nws_points_updated_at is None:
+        location_data = _location_model_to_data(location)
+        refresh_nws_metadata(location_data)
         location = location_repository.update_location(
             db,
-            existing_location,
-            {**location_data, "is_primary": existing_location.is_primary},
+            location,
+            _metadata_updates(location_data),
         )
-        location = location_repository.set_primary_location(db, location)
-
-    return location
+    return location_repository.set_primary_location(db, location, last_used_at=datetime.now(UTC))
 
 
 def refresh_nws_metadata(location_data: dict[str, Any]) -> str | None:
@@ -186,11 +225,13 @@ def _build_location_data(settings: Settings, payload_data: dict[str, Any]) -> di
         "city": city,
         "state": state,
         "county": county,
+        "county_fips": payload_data.get("county_fips"),
         "zip_code": zip_code,
         "latitude": latitude,
         "longitude": longitude,
         "timezone": payload_data.get("timezone"),
         "default_zoom": payload_data.get("default_zoom") or settings.default_location_zoom,
+        "source_method": payload_data.get("source_method") or "manual",
     }
 
 
@@ -211,8 +252,69 @@ def delete_location(db: Session, settings: Settings, location_id: int) -> Locati
     if location is None:
         return None
 
-    if location.zip_code == settings.default_location_postal_code:
-        raise DefaultLocationDeletionError("Default location cannot be deleted.")
+    if location.is_primary:
+        raise ActiveLocationDeletionError("Active location cannot be deleted.")
 
     location_repository.delete_location(db, location)
     return ensure_active_location(db, settings)
+
+
+def _location_update_data(
+    settings: Settings,
+    location: Location,
+    payload_data: dict[str, Any],
+) -> dict[str, Any]:
+    merged = _location_model_to_data(location)
+    for key, value in payload_data.items():
+        if value is not None:
+            merged[key] = value
+    built = _build_location_data(settings, merged)
+    return {
+        key: value
+        for key, value in built.items()
+        if getattr(location, key) != value
+    }
+
+
+def _location_model_to_data(location: Location) -> dict[str, Any]:
+    return {
+        "label": location.label,
+        "name": location.name,
+        "city": location.city,
+        "state": location.state,
+        "county": location.county,
+        "county_fips": location.county_fips,
+        "zip_code": location.zip_code,
+        "latitude": location.latitude,
+        "longitude": location.longitude,
+        "timezone": location.timezone,
+        "default_zoom": location.default_zoom,
+        "source_method": location.source_method,
+    }
+
+
+def _coordinates_changed(location: Location, location_data: dict[str, Any]) -> bool:
+    return (
+        "latitude" in location_data
+        and abs(float(location_data["latitude"]) - float(location.latitude)) > 0.0000001
+    ) or (
+        "longitude" in location_data
+        and abs(float(location_data["longitude"]) - float(location.longitude)) > 0.0000001
+    )
+
+
+def _metadata_updates(location_data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: location_data[key]
+        for key in (
+            "timezone",
+            "nws_office",
+            "nws_grid_x",
+            "nws_grid_y",
+            "forecast_zone",
+            "county_zone",
+            "fire_weather_zone",
+            "nws_points_updated_at",
+        )
+        if key in location_data
+    }

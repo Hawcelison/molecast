@@ -14,7 +14,7 @@ from app.api.routes import locations as locations_route
 from app.database import Base
 from app.db_init import ensure_location_schema
 from app.models.location import Location
-from app.schemas.location import ActiveLocationDirectUpdate, LocationCreate
+from app.schemas.location import ActiveLocationDirectUpdate, LocationCreate, LocationUpdate
 from app.schemas.location_resolver import NwsPointPreviewRequest
 from app.services import location_service
 from app.services.location_resolver_service import LocationResolverService, office_name_for
@@ -96,6 +96,24 @@ class RecordingPointsService:
         )
 
 
+def _saved_location_payload(**overrides):
+    payload = {
+        "label": "Kalamazoo Office",
+        "name": "Office",
+        "city": "Kalamazoo",
+        "county": "Kalamazoo",
+        "county_fips": "26077",
+        "state": "MI",
+        "zip_code": "49002",
+        "latitude": 42.2917,
+        "longitude": -85.5872,
+        "default_zoom": 10,
+        "source_method": "manual",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_default_active_location_exists_when_none_saved(db) -> None:
     location = location_service.get_active_location(db, _settings())
 
@@ -145,6 +163,43 @@ def test_put_active_location_persists_new_primary_with_metadata(db, monkeypatch)
     assert location.county_zone == "MIC077"
     assert location.fire_weather_zone == "MIZ072"
     assert location.nws_points_updated_at is not None
+    assert location.source_method == "manual"
+    assert location.last_used_at is not None
+    assert db.query(Location).filter(Location.is_primary.is_(True)).count() == 1
+
+
+def test_put_active_location_updates_current_primary_without_zip_dedupe(db, monkeypatch) -> None:
+    monkeypatch.setattr(location_service, "nws_points_service", SuccessfulPointsService())
+    settings = _settings()
+    active_location = location_service.get_active_location(db, settings)
+    original_id = active_location.id
+    inactive_same_zip = location_service.create_location(
+        db,
+        settings,
+        _saved_location_payload(
+            label="Same ZIP saved point",
+            name="Same ZIP saved point",
+            latitude=42.25,
+            longitude=-85.55,
+        ),
+    )
+
+    location = location_service.set_active_location_from_payload(
+        db,
+        settings,
+        _saved_location_payload(
+            label="Updated active same ZIP",
+            name="Updated active same ZIP",
+            latitude=42.2015,
+            longitude=-85.5805,
+        ),
+    )
+
+    assert location.id == original_id
+    assert location.label == "Updated active same ZIP"
+    assert inactive_same_zip.id != location.id
+    assert db.get(Location, inactive_same_zip.id).label == "Same ZIP saved point"
+    assert db.query(Location).filter(Location.zip_code == "49002").count() == 2
     assert db.query(Location).filter(Location.is_primary.is_(True)).count() == 1
 
 
@@ -198,6 +253,195 @@ def test_location_create_trims_zip_code_whitespace() -> None:
     )
 
     assert payload.zip_code == "49002"
+
+
+def test_saved_locations_can_share_zip_with_different_names_and_coordinates(db, monkeypatch) -> None:
+    monkeypatch.setattr(location_service, "nws_points_service", SuccessfulPointsService())
+    settings = _settings()
+    first = location_service.create_location(
+        db,
+        settings,
+        _saved_location_payload(label="Home", name="Home", latitude=42.2012, longitude=-85.58),
+    )
+    second = location_service.create_location(
+        db,
+        settings,
+        _saved_location_payload(label="Office", name="Office", latitude=42.2917, longitude=-85.5872),
+    )
+
+    assert first.id != second.id
+    assert first.zip_code == second.zip_code == "49002"
+    assert db.query(Location).filter(Location.zip_code == "49002").count() == 2
+
+
+def test_create_saved_location_does_not_activate_by_default(db, monkeypatch) -> None:
+    monkeypatch.setattr(locations_route, "settings", _settings())
+    monkeypatch.setattr(location_service, "nws_points_service", SuccessfulPointsService())
+    active_location = location_service.get_active_location(db, _settings())
+
+    created = locations_route.create_location(
+        LocationCreate(**_saved_location_payload(label="Inactive saved point")),
+        db,
+    )
+
+    assert created["label"] == "Inactive saved point"
+    assert created["is_primary"] is False
+    assert created["nws_office"] == "GRR"
+    assert location_service.get_active_location(db, _settings()).id == active_location.id
+
+
+def test_create_saved_location_can_explicitly_activate(db, monkeypatch) -> None:
+    monkeypatch.setattr(locations_route, "settings", _settings())
+    monkeypatch.setattr(location_service, "nws_points_service", SuccessfulPointsService())
+    location_service.get_active_location(db, _settings())
+
+    created = locations_route.create_location(
+        LocationCreate(**_saved_location_payload(label="Activated saved point"), is_primary=True),
+        db,
+    )
+
+    assert created["label"] == "Activated saved point"
+    assert created["is_primary"] is True
+    assert created["last_used_at"] is not None
+    assert db.query(Location).filter(Location.is_primary.is_(True)).count() == 1
+
+
+def test_activate_saved_location_refreshes_missing_metadata_and_sets_last_used(db, monkeypatch) -> None:
+    monkeypatch.setattr(locations_route, "settings", _settings())
+    monkeypatch.setattr(location_service, "nws_points_service", FailingPointsService())
+    saved_location = location_service.create_location(
+        db,
+        _settings(),
+        _saved_location_payload(label="Needs metadata"),
+    )
+    assert saved_location.nws_points_updated_at is None
+    points_service = RecordingPointsService()
+    monkeypatch.setattr(location_service, "nws_points_service", points_service)
+
+    activated = locations_route.activate_location(saved_location.id, db)
+
+    assert activated["id"] == saved_location.id
+    assert activated["is_primary"] is True
+    assert activated["nws_office"] == "GRR"
+    assert activated["last_used_at"] is not None
+    assert points_service.calls == [(42.2917, -85.5872)]
+    assert db.query(Location).filter(Location.is_primary.is_(True)).count() == 1
+
+
+def test_activate_saved_location_preserves_current_metadata(db, monkeypatch) -> None:
+    monkeypatch.setattr(locations_route, "settings", _settings())
+    monkeypatch.setattr(location_service, "nws_points_service", SuccessfulPointsService())
+    saved_location = location_service.create_location(
+        db,
+        _settings(),
+        _saved_location_payload(label="Already has metadata"),
+    )
+    points_service = RecordingPointsService()
+    monkeypatch.setattr(location_service, "nws_points_service", points_service)
+
+    activated = locations_route.activate_location(saved_location.id, db)
+
+    assert activated["id"] == saved_location.id
+    assert activated["nws_office"] == "GRR"
+    assert points_service.calls == []
+    assert activated["last_used_at"] is not None
+
+
+def test_update_saved_location_refreshes_metadata_when_coordinates_change(db, monkeypatch) -> None:
+    monkeypatch.setattr(locations_route, "settings", _settings())
+    monkeypatch.setattr(location_service, "nws_points_service", SuccessfulPointsService())
+    saved_location = location_service.create_location(
+        db,
+        _settings(),
+        _saved_location_payload(label="Before move"),
+    )
+    points_service = RecordingPointsService()
+    monkeypatch.setattr(location_service, "nws_points_service", points_service)
+
+    updated = locations_route.update_location(
+        saved_location.id,
+        LocationUpdate(label="After move", latitude=42.35, longitude=-85.64),
+        db,
+    )
+
+    assert updated["label"] == "After move"
+    assert updated["latitude"] == 42.35
+    assert updated["longitude"] == -85.64
+    assert updated["nws_office"] == "GRR"
+    assert points_service.calls == [(42.35, -85.64)]
+
+
+def test_delete_saved_location_deletes_inactive_location(db, monkeypatch) -> None:
+    monkeypatch.setattr(locations_route, "settings", _settings())
+    monkeypatch.setattr(location_service, "nws_points_service", SuccessfulPointsService())
+    active_location = location_service.get_active_location(db, _settings())
+    saved_location = location_service.create_location(
+        db,
+        _settings(),
+        _saved_location_payload(label="Delete me"),
+    )
+
+    response = locations_route.delete_location(saved_location.id, db)
+
+    assert response["deleted"] is True
+    assert response["active_location"]["id"] == active_location.id
+    assert db.get(Location, saved_location.id) is None
+
+
+def test_delete_saved_location_rejects_active_location(db, monkeypatch) -> None:
+    monkeypatch.setattr(locations_route, "settings", _settings())
+    active_location = location_service.get_active_location(db, _settings())
+
+    with pytest.raises(HTTPException) as exc_info:
+        locations_route.delete_location(active_location.id, db)
+
+    assert exc_info.value.status_code == 409
+    assert "Active location cannot be deleted" in exc_info.value.detail
+
+
+def test_saved_location_routes_do_not_modify_test_alert_fixture(db, monkeypatch) -> None:
+    monkeypatch.setattr(locations_route, "settings", _settings())
+    monkeypatch.setattr(location_service, "nws_points_service", SuccessfulPointsService())
+    fixture_path = Path("test/alerts_test.json")
+    before = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+
+    created = locations_route.create_location(
+        LocationCreate(**_saved_location_payload(label="Fixture safety")),
+        db,
+    )
+    locations_route.update_location(created["id"], LocationUpdate(label="Fixture safety updated"), db)
+    locations_route.activate_location(created["id"], db)
+    inactive = locations_route.create_location(
+        LocationCreate(**_saved_location_payload(label="Fixture safety inactive", latitude=42.3)),
+        db,
+    )
+    locations_route.delete_location(inactive["id"], db)
+
+    after = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+    assert after == before
+
+
+def test_saved_location_list_orders_active_then_last_used_then_label(db, monkeypatch) -> None:
+    monkeypatch.setattr(locations_route, "settings", _settings())
+    monkeypatch.setattr(location_service, "nws_points_service", SuccessfulPointsService())
+    active = location_service.get_active_location(db, _settings())
+    older = location_service.create_location(
+        db,
+        _settings(),
+        _saved_location_payload(label="Older", latitude=42.21, longitude=-85.51),
+    )
+    newer = location_service.create_location(
+        db,
+        _settings(),
+        _saved_location_payload(label="Newer", latitude=42.22, longitude=-85.52),
+    )
+    older.last_used_at = datetime(2026, 1, 1)
+    newer.last_used_at = datetime(2026, 2, 1)
+    db.commit()
+
+    rows = locations_route.list_locations(db)
+
+    assert [row["id"] for row in rows[:3]] == [active.id, newer.id, older.id]
 
 
 def test_location_status_reports_missing_metadata(db) -> None:
@@ -473,11 +717,21 @@ def test_schema_evolution_adds_missing_columns_without_dropping_rows() -> None:
     ensure_location_schema(bind=engine)
 
     with engine.connect() as connection:
-        row = connection.execute(text("SELECT label, default_zoom, nws_office FROM locations")).one()
+        row = connection.execute(
+            text(
+                """
+                SELECT label, default_zoom, nws_office, source_method, last_used_at, county_fips
+                FROM locations
+                """
+            )
+        ).one()
 
     assert row.label == "Portage, MI 49002"
     assert row.default_zoom == 9
     assert row.nws_office is None
+    assert row.source_method == "legacy"
+    assert row.last_used_at is not None
+    assert row.county_fips is None
 
 
 def test_points_metadata_parses_and_normalizes_zone_ids() -> None:

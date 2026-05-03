@@ -10,6 +10,7 @@ from app.schemas.location import (
     LocationDeleteResponse,
     LocationRead,
     LocationStatus,
+    LocationUpdate,
     ZipLookupResponse,
 )
 from app.schemas.location_resolver import (
@@ -128,7 +129,7 @@ def set_active_location(
     payload: ActiveLocationUpdate,
     db: Session = Depends(get_db),
 ):
-    location = location_service.set_active_location(db, payload.location_id)
+    location = location_service.activate_location(db, settings, payload.location_id)
     if location is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -152,7 +153,10 @@ def put_active_location(
 
 @router.get("/locations", response_model=list[LocationRead])
 def list_locations(db: Session = Depends(get_db)):
-    return location_service.list_locations(db, settings)
+    return [
+        location_service.location_to_dict(location, settings)
+        for location in location_service.list_locations(db, settings)
+    ]
 
 
 @router.post(
@@ -164,14 +168,46 @@ def create_location(
     payload: LocationCreate,
     db: Session = Depends(get_db),
 ):
-    return location_service.create_location(db, payload.model_dump())
+    location = location_service.create_location(db, settings, payload.model_dump())
+    return location_service.location_to_dict(location, settings)
+
+
+@router.put("/locations/{location_id}", response_model=LocationRead)
+def update_location(
+    location_id: int,
+    payload: LocationUpdate,
+    db: Session = Depends(get_db),
+):
+    location = location_service.update_location(
+        db,
+        settings,
+        location_id,
+        payload.model_dump(exclude_unset=True),
+    )
+    if location is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found.",
+        )
+    return location_service.location_to_dict(location, settings)
+
+
+@router.post("/locations/{location_id}/activate", response_model=LocationRead)
+def activate_location(location_id: int, db: Session = Depends(get_db)):
+    location = location_service.activate_location(db, settings, location_id)
+    if location is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found.",
+        )
+    return location_service.location_to_dict(location, settings)
 
 
 @router.delete("/locations/{location_id}", response_model=LocationDeleteResponse)
 def delete_location(location_id: int, db: Session = Depends(get_db)):
     try:
         active_location = location_service.delete_location(db, settings, location_id)
-    except location_service.DefaultLocationDeletionError as exc:
+    except location_service.ActiveLocationDeletionError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
@@ -184,5 +220,5 @@ def delete_location(location_id: int, db: Session = Depends(get_db)):
         )
     return {
         "deleted": True,
-        "active_location": active_location,
+        "active_location": location_service.location_to_dict(active_location, settings),
     }

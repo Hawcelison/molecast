@@ -25,6 +25,7 @@ class Location(Base):
     city: Mapped[str] = mapped_column(String(80), nullable=False)
     state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
     county: Mapped[str] = mapped_column(String(80), nullable=False)
+    county_fips: Mapped[str | None] = mapped_column(String(10), nullable=True)
     zip_code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     latitude: Mapped[float] = mapped_column(Float, nullable=False)
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
@@ -37,6 +38,13 @@ class Location(Base):
     county_zone: Mapped[str | None] = mapped_column(String(80), nullable=True)
     fire_weather_zone: Mapped[str | None] = mapped_column(String(80), nullable=True)
     nws_points_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    source_method: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+        default="legacy",
+        server_default=text("'legacy'"),
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_primary: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

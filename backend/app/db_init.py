@@ -25,6 +25,7 @@ def create_location_indexes() -> None:
 
 LOCATION_SCHEMA_COLUMNS = {
     "name": "VARCHAR(120)",
+    "county_fips": "VARCHAR(10)",
     "timezone": "VARCHAR(80)",
     "default_zoom": "INTEGER NOT NULL DEFAULT 9",
     "nws_office": "VARCHAR(20)",
@@ -34,6 +35,8 @@ LOCATION_SCHEMA_COLUMNS = {
     "county_zone": "VARCHAR(80)",
     "fire_weather_zone": "VARCHAR(80)",
     "nws_points_updated_at": "DATETIME",
+    "source_method": "VARCHAR(30) DEFAULT 'legacy'",
+    "last_used_at": "DATETIME",
 }
 
 
@@ -48,9 +51,21 @@ def ensure_location_schema(bind=engine) -> None:
         for column_name, column_sql in LOCATION_SCHEMA_COLUMNS.items()
         if column_name not in existing_columns
     ]
-    if not missing_columns:
-        return
-
     with bind.begin() as connection:
         for column_name, column_sql in missing_columns:
             connection.execute(text(f"ALTER TABLE locations ADD COLUMN {column_name} {column_sql}"))
+        available_columns = existing_columns | {column_name for column_name, _column_sql in missing_columns}
+        if "source_method" in available_columns:
+            connection.execute(
+                text("UPDATE locations SET source_method = 'legacy' WHERE source_method IS NULL")
+            )
+        if "last_used_at" in available_columns:
+            connection.execute(
+                text(
+                    """
+                    UPDATE locations
+                    SET last_used_at = updated_at
+                    WHERE is_primary = 1 AND last_used_at IS NULL
+                    """
+                )
+            )
