@@ -264,6 +264,29 @@ def test_nws_point_preview_reuses_points_service_and_maps_grr_office() -> None:
     assert preview.updated_at is not None
 
 
+def test_nws_point_preview_includes_nearest_local_location_details() -> None:
+    class PreviewLocationRepository:
+        def find_nearest_zip(self, latitude: float, longitude: float):
+            assert latitude == 42.2012
+            assert longitude == -85.588
+            return SimpleNamespace(
+                primary_city="Portage",
+                county="Kalamazoo",
+                state="MI",
+                zip_code="49002",
+            )
+
+    points_service = RecordingPointsService()
+    service = LocationResolverService(repository=PreviewLocationRepository(), points_service=points_service)
+
+    preview = service.preview_nws_point(42.2012, -85.588)
+
+    assert preview.city == "Portage"
+    assert preview.county == "Kalamazoo"
+    assert preview.state == "MI"
+    assert preview.zip_code == "49002"
+
+
 def test_nws_point_preview_office_name_falls_back_to_grid_id() -> None:
     assert office_name_for("XYZ") == "XYZ"
 

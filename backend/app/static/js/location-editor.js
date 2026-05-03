@@ -109,6 +109,7 @@
     if (!button) {
       return;
     }
+    button.textContent = isActive ? "Cancel pick" : "Pick from map";
     button.setAttribute("aria-pressed", String(isActive));
     button.dataset.active = isActive ? "true" : "false";
   }
@@ -376,6 +377,46 @@
       return "Unavailable";
     }
     return String(value);
+  }
+
+  function setFieldValue(name, value) {
+    const field = getField(name);
+    if (!field || value === null || value === undefined || value === "") {
+      return;
+    }
+    field.value = String(value);
+  }
+
+  function previewLocationLabel(previewPayload) {
+    const cityState = [previewPayload.city, previewPayload.state].filter(Boolean).join(", ");
+    return [cityState, previewPayload.zip_code].filter(Boolean).join(" ").trim();
+  }
+
+  function identityFieldsMatchActiveLocation() {
+    const activeLocation = state.activeLocation || {};
+    return ["label", "name"].every(function (name) {
+      const fieldValue = getField(name)?.value.trim() || "";
+      const activeValue = activeLocation[name] ? String(activeLocation[name]) : "";
+      return !fieldValue || fieldValue === activeValue;
+    });
+  }
+
+  function populateLocationFieldsFromPreview(previewPayload) {
+    if (!previewPayload.city && !previewPayload.county && !previewPayload.state && !previewPayload.zip_code) {
+      return false;
+    }
+
+    setFieldValue("city", previewPayload.city);
+    setFieldValue("county", previewPayload.county);
+    setFieldValue("state", previewPayload.state);
+    setFieldValue("zip_code", previewPayload.zip_code);
+
+    const label = previewLocationLabel(previewPayload);
+    if (label && identityFieldsMatchActiveLocation()) {
+      setFieldValue("label", label);
+      setFieldValue("name", label);
+    }
+    return true;
   }
 
   function setNwsPreview(content, type) {
@@ -688,12 +729,16 @@
     const wrapper = document.createElement("div");
     const title = document.createElement("div");
     title.className = "location-editor__nws-preview-title";
-    title.textContent = `NWS Office: ${valueOrUnavailable(previewPayload.nws_office_code)} / ${valueOrUnavailable(previewPayload.nws_office_name)}`;
+    title.textContent = "Selected point preview";
 
     const grid = document.createElement("div");
     grid.className = "location-editor__nws-preview-grid";
 
     [
+      ["Coordinates", `${formatCoordinate(previewPayload.latitude)}, ${formatCoordinate(previewPayload.longitude)}`],
+      ["Location", previewLocationLabel(previewPayload) || "Unavailable"],
+      ["County", valueOrUnavailable(previewPayload.county)],
+      ["NWS office", `${valueOrUnavailable(previewPayload.nws_office_code)} / ${valueOrUnavailable(previewPayload.nws_office_name)}`],
       ["Grid", `${valueOrUnavailable(previewPayload.nws_office)} ${valueOrUnavailable(previewPayload.nws_grid_x)},${valueOrUnavailable(previewPayload.nws_grid_y)}`],
       ["Forecast zone", valueOrUnavailable(previewPayload.forecast_zone)],
       ["County zone", valueOrUnavailable(previewPayload.county_zone)],
@@ -948,6 +993,9 @@
         return;
       }
       renderNwsPreview(preview);
+      if (populateLocationFieldsFromPreview(preview)) {
+        setMessage("Preview populated location details. Review and save to apply.", "success");
+      }
     } catch (error) {
       if (requestId !== state.previewRequestId) {
         return;

@@ -116,10 +116,15 @@ class LocationResolverService:
         office = normalize_office_id(metadata.nws_office)
         office_code = office_code_for(office)
         office_name = office_name_for(office)
+        nearest_zip = self._nearest_zip_for_preview(latitude, longitude)
 
         return NwsPointPreviewResponse(
             latitude=latitude,
             longitude=longitude,
+            city=nearest_zip.primary_city if nearest_zip else None,
+            county=nearest_zip.county if nearest_zip else None,
+            state=nearest_zip.state if nearest_zip else None,
+            zip_code=nearest_zip.zip_code if nearest_zip else None,
             nws_office=office,
             nws_office_code=office_code,
             nws_office_name=office_name,
@@ -132,6 +137,12 @@ class LocationResolverService:
             status="ok",
             updated_at=datetime.now(UTC),
         )
+
+    def _nearest_zip_for_preview(self, latitude: float, longitude: float) -> ZipLocationRecord | None:
+        lookup = getattr(self.repository, "find_nearest_zip", None)
+        if not callable(lookup):
+            return None
+        return lookup(latitude, longitude)
 
 
 def normalize_search_query(query: str | None) -> str:

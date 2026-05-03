@@ -36,6 +36,10 @@ class NwsPointPreviewRequest(BaseModel):
 class NwsPointPreviewResponse(BaseModel):
     latitude: float
     longitude: float
+    city: str | None = None
+    county: str | None = None
+    state: str | None = None
+    zip_code: str | None = None
     nws_office: str | None = None
     nws_office_code: str | None = None
     nws_office_name: str | None = None

@@ -88,6 +88,30 @@ def test_repository_returns_exact_zip_record(tmp_path: Path) -> None:
     assert record.longitude == -85.5874
 
 
+def test_repository_returns_nearest_zip_within_preview_range(tmp_path: Path) -> None:
+    source_json = tmp_path / "zip_codes.json"
+    output_db = tmp_path / "location_lookup.sqlite3"
+    manifest_path = tmp_path / "location_lookup_manifest.json"
+    _write_seed_json(source_json)
+    import_location_lookup(source_json, output_db, manifest_path, "test-seed", None, "test")
+
+    record = LocationLookupRepository(output_db).find_nearest_zip(42.205, -85.575)
+
+    assert record is not None
+    assert record.zip_code == "49002"
+    assert record.primary_city == "Portage"
+
+
+def test_repository_returns_none_when_nearest_zip_is_out_of_preview_range(tmp_path: Path) -> None:
+    source_json = tmp_path / "zip_codes.json"
+    output_db = tmp_path / "location_lookup.sqlite3"
+    manifest_path = tmp_path / "location_lookup_manifest.json"
+    _write_seed_json(source_json)
+    import_location_lookup(source_json, output_db, manifest_path, "test-seed", None, "test")
+
+    assert LocationLookupRepository(output_db).find_nearest_zip(41.0, -86.5, max_distance_miles=5) is None
+
+
 def test_repository_returns_none_for_missing_database(tmp_path: Path) -> None:
     assert LocationLookupRepository(tmp_path / "missing.sqlite3").lookup_zip("49002") is None
 

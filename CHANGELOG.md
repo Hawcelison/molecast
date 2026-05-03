@@ -2,6 +2,16 @@
 
 Molecast release notes will be tracked here.
 
+## 0.4.0 - 2026-05-03
+
+- Added map-click location preview from the active location editor.
+- Added `Pick from map` / `Cancel pick` behavior for temporary map-pick mode.
+- Reused `POST /api/location/points/preview` for clicked-coordinate previews.
+- Populated preview fields with coordinates, local ZIP/city metadata when available, and NWS office/grid/zone metadata.
+- Preserved explicit Save behavior through `PUT /api/location/active`, including map recentering and alert refresh after Save.
+- Kept normal alert banner click/focus behavior when map-pick mode is inactive.
+- Kept `test/alerts_test.json` clean during validation.
+
 ## 0.3.2 - 2026-05-03
 
 - Improved `/health` readiness behavior to include database readiness.
