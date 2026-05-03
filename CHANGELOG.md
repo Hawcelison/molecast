@@ -2,6 +2,17 @@
 
 Molecast release notes will be tracked here.
 
+## 0.5.2 - 2026-05-03
+
+- Added explicit/offline importer support for HUD-USPS ZIP-County enrichment as a foundation for county/state metadata on ZCTA-backed lookup rows.
+- Added Census county Gazetteer parser support for county FIPS to county/state mapping.
+- Added deterministic multi-county ZIP ranking using `RES_RATIO`, `TOT_RATIO`, `BUS_RATIO`, `OTH_RATIO`, then `COUNTY`.
+- Preserved curated seed city/state/county metadata and Census ZCTA latitude/longitude metadata during enrichment.
+- Ignored HUD city fields so Molecast does not fake postal city names.
+- Propagated `county_fips` through ZIP lookup schemas and routes.
+- Added source instructions under `data/reference/census/` and `data/reference/hud_usps/`.
+- Did not rebuild the real nationwide lookup database in this phase because HUD-USPS and Census county source files are not present yet; real HUD data import is next.
+
 ## 0.5.1 - 2026-05-03
 
 - Imported public Census 2025 Gazetteer ZCTA data into the local ZIP lookup database.

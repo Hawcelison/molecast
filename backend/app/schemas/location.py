@@ -96,6 +96,7 @@ class ZipLookupResponse(BaseModel):
     city: str | None = None
     state: str | None = None
     county: str | None = None
+    county_fips: str | None = None
     latitude: float
     longitude: float
     default_zoom: int = Field(default=9, ge=0, le=22)

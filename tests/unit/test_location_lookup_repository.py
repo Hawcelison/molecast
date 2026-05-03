@@ -37,6 +37,31 @@ def _write_seed_json(path: Path) -> None:
     )
 
 
+def _write_county_reference(path: Path, rows: list[tuple[str, str, str]]) -> None:
+    path.write_text(
+        "\n".join(
+            ["USPS|GEOID|GEOIDFQ|ANSICODE|NAME"]
+            + [f"{state}|{geoid}|0500000US{geoid}|00000000|{name}" for state, geoid, name in rows]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_hud_zip_county(path: Path, rows: list[tuple[str, str, float, float, float, float, str, str]]) -> None:
+    path.write_text(
+        "\n".join(
+            ["ZIP,COUNTY,RES_RATIO,BUS_RATIO,OTH_RATIO,TOT_RATIO,USPS_ZIP_PREF_CITY,USPS_ZIP_PREF_STATE"]
+            + [
+                f"{zip_code},{county},{res_ratio},{bus_ratio},{oth_ratio},{tot_ratio},{city},{state}"
+                for zip_code, county, res_ratio, bus_ratio, oth_ratio, tot_ratio, city, state in rows
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_importer_creates_lookup_database_from_zip_json(tmp_path: Path) -> None:
     source_json = tmp_path / "zip_codes.json"
     output_db = tmp_path / "location_lookup.sqlite3"
@@ -181,6 +206,230 @@ def test_importer_merges_seed_json_with_census_zcta_gazetteer(tmp_path: Path) ->
     assert zcta_only.confidence == "approximate"
 
 
+def test_importer_enriches_zcta_rows_with_hud_zip_county_metadata(tmp_path: Path) -> None:
+    source_json = tmp_path / "zip_codes.json"
+    zcta_source = tmp_path / "gaz_zcta.txt"
+    hud_source = tmp_path / "ZIP_COUNTY_2025_Q4.csv"
+    county_reference = tmp_path / "gaz_counties.txt"
+    output_db = tmp_path / "location_lookup.sqlite3"
+    manifest_path = tmp_path / "location_lookup_manifest.json"
+    _write_seed_json(source_json)
+    zcta_source.write_text(
+        "\n".join(
+            [
+                "GEOID|GEOIDFQ|ALAND|AWATER|ALAND_SQMI|AWATER_SQMI|INTPTLAT|INTPTLONG",
+                "10001|860Z200US10001|1|0|0.001|0|40.750649|-73.997298",
+                "49002|860Z200US49002|1|0|0.001|0|42.197202|-85.555543",
+                "90210|860Z200US90210|1|0|0.001|0|34.100517|-118.41463",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_hud_zip_county(
+        hud_source,
+        [
+            ("10001", "36061", 0.98, 0.99, 1.0, 0.98, "NEW YORK", "NY"),
+            ("49002", "26077", 0.99, 0.99, 1.0, 0.99, "PORTAGE", "MI"),
+            ("49005", "26077", 0.99, 0.99, 1.0, 0.99, "KALAMAZOO", "MI"),
+            ("90210", "06037", 0.95, 0.97, 1.0, 0.96, "BEVERLY HILLS", "CA"),
+        ],
+    )
+    _write_county_reference(
+        county_reference,
+        [
+            ("CA", "06037", "Los Angeles County"),
+            ("MI", "26077", "Kalamazoo County"),
+            ("NY", "36061", "New York County"),
+        ],
+    )
+
+    manifest = import_location_lookup(
+        source_json=source_json,
+        output_db=output_db,
+        manifest_path=manifest_path,
+        source_name="test-seed",
+        source_year=None,
+        source_version="seed-v1",
+        zcta_source_path=zcta_source,
+        zcta_source_year="2025",
+        zcta_source_version="2025_Gaz_zcta_national",
+        zcta_dataset_version="2025_Gazetteer_ZCTA",
+        hud_zip_county_path=hud_source,
+        hud_source_year="2025",
+        hud_source_quarter="Q4",
+        hud_source_version="HUD_USPS_2025_Q4",
+        hud_dataset_version="HUD_USPS_ZIP_COUNTY_2025_Q4",
+        county_reference_path=county_reference,
+        sentinel_zip_codes=["49002", "49005", "10001", "90210"],
+    )
+    repository = LocationLookupRepository(output_db)
+    portage = repository.lookup_zip("49002")
+    kalamazoo = repository.lookup_zip("49005")
+    new_york = repository.lookup_zip("10001")
+    beverly_hills = repository.lookup_zip("90210")
+
+    assert portage is not None
+    assert portage.primary_city == "Portage"
+    assert portage.state == "MI"
+    assert portage.county == "Kalamazoo"
+    assert portage.county_fips == "26077"
+    assert portage.latitude == 42.197202
+    assert kalamazoo is not None
+    assert kalamazoo.primary_city == "Kalamazoo"
+    assert kalamazoo.state == "MI"
+    assert kalamazoo.county == "Kalamazoo"
+    assert kalamazoo.county_fips == "26077"
+    assert new_york is not None
+    assert new_york.primary_city is None
+    assert new_york.state == "NY"
+    assert new_york.county == "New York"
+    assert new_york.county_fips == "36061"
+    assert beverly_hills is not None
+    assert beverly_hills.primary_city is None
+    assert beverly_hills.state == "CA"
+    assert beverly_hills.county == "Los Angeles"
+    assert beverly_hills.county_fips == "06037"
+    assert manifest["hud_usps_zip_county_source"]["rows_processed"] == 4
+    assert manifest["hud_usps_zip_county_source"]["distinct_zips_processed"] == 4
+    assert manifest["hud_usps_zip_county_source"]["matched_zips"] == 4
+    assert manifest["hud_usps_zip_county_source"]["enriched_zips"] == 4
+    assert manifest["hud_usps_zip_county_source"]["multi_county_zip_count"] == 0
+    assert manifest["hud_usps_zip_county_source"]["seed_preserved_count"] == 2
+    assert manifest["hud_usps_zip_county_source"]["conflict_count"] == 0
+    assert manifest["hud_usps_zip_county_source"]["checksum_sha256"]
+    assert manifest["county_reference_source"]["rows_processed"] == 3
+    assert manifest["county_reference_source"]["checksum_sha256"]
+
+
+def test_importer_ranks_multi_county_hud_rows_deterministically(tmp_path: Path) -> None:
+    source_json = tmp_path / "zip_codes.json"
+    zcta_source = tmp_path / "gaz_zcta.txt"
+    hud_source = tmp_path / "ZIP_COUNTY_2025_Q4.csv"
+    county_reference = tmp_path / "gaz_counties.txt"
+    output_db = tmp_path / "location_lookup.sqlite3"
+    manifest_path = tmp_path / "location_lookup_manifest.json"
+    source_json.write_text("[]", encoding="utf-8")
+    zcta_source.write_text(
+        "\n".join(
+            [
+                "GEOID|GEOIDFQ|ALAND|AWATER|ALAND_SQMI|AWATER_SQMI|INTPTLAT|INTPTLONG",
+                "77777|860Z200US77777|1|0|0.001|0|40.0|-90.0",
+                "88888|860Z200US88888|1|0|0.001|0|41.0|-91.0",
+                "88889|860Z200US88889|1|0|0.001|0|42.0|-92.0",
+                "88890|860Z200US88890|1|0|0.001|0|43.0|-93.0",
+                "88891|860Z200US88891|1|0|0.001|0|44.0|-94.0",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_hud_zip_county(
+        hud_source,
+        [
+            ("77777", "01001", 0.4, 1.0, 1.0, 1.0, "IGNORED", "AL"),
+            ("77777", "01003", 0.8, 0.0, 0.0, 0.0, "IGNORED", "AL"),
+            ("88888", "01001", 0.5, 0.0, 0.0, 0.4, "IGNORED", "AL"),
+            ("88888", "01005", 0.5, 0.0, 0.0, 0.7, "IGNORED", "AL"),
+            ("88889", "01001", 0.5, 0.4, 0.0, 0.7, "IGNORED", "AL"),
+            ("88889", "01007", 0.5, 0.8, 0.0, 0.7, "IGNORED", "AL"),
+            ("88890", "01001", 0.5, 0.8, 0.1, 0.7, "IGNORED", "AL"),
+            ("88890", "01009", 0.5, 0.8, 0.6, 0.7, "IGNORED", "AL"),
+            ("88891", "01011", 0.5, 0.8, 0.6, 0.7, "IGNORED", "AL"),
+            ("88891", "01001", 0.5, 0.8, 0.6, 0.7, "IGNORED", "AL"),
+        ],
+    )
+    _write_county_reference(
+        county_reference,
+        [
+            ("AL", "01001", "Autauga County"),
+            ("AL", "01003", "Baldwin County"),
+            ("AL", "01005", "Barbour County"),
+            ("AL", "01007", "Bibb County"),
+            ("AL", "01009", "Blount County"),
+            ("AL", "01011", "Bullock County"),
+        ],
+    )
+
+    manifest = import_location_lookup(
+        source_json=source_json,
+        output_db=output_db,
+        manifest_path=manifest_path,
+        source_name="test-seed",
+        source_year=None,
+        source_version="seed-v1",
+        zcta_source_path=zcta_source,
+        zcta_source_year="2025",
+        zcta_source_version="2025_Gaz_zcta_national",
+        zcta_dataset_version="2025_Gazetteer_ZCTA",
+        hud_zip_county_path=hud_source,
+        hud_source_year="2025",
+        hud_source_quarter="Q4",
+        hud_source_version="HUD_USPS_2025_Q4",
+        county_reference_path=county_reference,
+        sentinel_zip_codes=["77777", "88888", "88889", "88890", "88891"],
+    )
+    repository = LocationLookupRepository(output_db)
+
+    assert repository.lookup_zip("77777").county_fips == "01003"
+    assert repository.lookup_zip("88888").county_fips == "01005"
+    assert repository.lookup_zip("88889").county_fips == "01007"
+    assert repository.lookup_zip("88890").county_fips == "01009"
+    assert repository.lookup_zip("88891").county_fips == "01001"
+    assert manifest["hud_usps_zip_county_source"]["multi_county_zip_count"] == 5
+
+
+def test_importer_ignores_hud_city_and_handles_missing_county_mapping(tmp_path: Path) -> None:
+    source_json = tmp_path / "zip_codes.json"
+    zcta_source = tmp_path / "gaz_zcta.txt"
+    hud_source = tmp_path / "ZIP_COUNTY_2025_Q4.csv"
+    county_reference = tmp_path / "gaz_counties.txt"
+    output_db = tmp_path / "location_lookup.sqlite3"
+    manifest_path = tmp_path / "location_lookup_manifest.json"
+    source_json.write_text("[]", encoding="utf-8")
+    zcta_source.write_text(
+        "\n".join(
+            [
+                "GEOID|GEOIDFQ|ALAND|AWATER|ALAND_SQMI|AWATER_SQMI|INTPTLAT|INTPTLONG",
+                "30303|860Z200US30303|1|0|0.001|0|33.7529|-84.3903",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_hud_zip_county(
+        hud_source,
+        [("30303", "13121", 0.9, 0.9, 0.9, 0.9, "ATLANTA", "GA")],
+    )
+    _write_county_reference(county_reference, [("GA", "13089", "DeKalb County")])
+
+    import_location_lookup(
+        source_json=source_json,
+        output_db=output_db,
+        manifest_path=manifest_path,
+        source_name="test-seed",
+        source_year=None,
+        source_version="seed-v1",
+        zcta_source_path=zcta_source,
+        zcta_source_year="2025",
+        zcta_source_version="2025_Gaz_zcta_national",
+        zcta_dataset_version="2025_Gazetteer_ZCTA",
+        hud_zip_county_path=hud_source,
+        hud_source_year="2025",
+        hud_source_quarter="Q4",
+        hud_source_version="HUD_USPS_2025_Q4",
+        county_reference_path=county_reference,
+        sentinel_zip_codes=["30303"],
+    )
+    record = LocationLookupRepository(output_db).lookup_zip("30303")
+
+    assert record is not None
+    assert record.primary_city is None
+    assert record.state == "GA"
+    assert record.county is None
+    assert record.county_fips == "13121"
+
+
 def test_repository_returns_exact_zip_record(tmp_path: Path) -> None:
     source_json = tmp_path / "zip_codes.json"
     output_db = tmp_path / "location_lookup.sqlite3"
@@ -257,6 +506,7 @@ def test_zip_lookup_service_keeps_frontend_response_contract(tmp_path: Path) -> 
         "city": "Portage",
         "state": "MI",
         "county": "Kalamazoo",
+        "county_fips": None,
         "latitude": 42.2012,
         "longitude": -85.58,
         "default_zoom": 9,

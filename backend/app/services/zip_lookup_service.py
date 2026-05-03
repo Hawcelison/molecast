@@ -21,6 +21,7 @@ class ZipCodeLookupResult(BaseModel):
     city: str | None = None
     state: str | None = None
     county: str | None = None
+    county_fips: str | None = None
     latitude: float
     longitude: float
     default_zoom: int = Field(default=9, ge=0, le=22)
@@ -53,6 +54,7 @@ class SQLiteZipCodeProvider:
             city=record.primary_city,
             state=record.state,
             county=record.county,
+            county_fips=record.county_fips,
             latitude=record.latitude,
             longitude=record.longitude,
             default_zoom=record.default_zoom,

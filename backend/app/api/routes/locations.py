@@ -108,6 +108,7 @@ def _lookup_zip_code_response(zip_code: str) -> ZipLookupResponse:
         city=lookup_result.city,
         state=lookup_result.state,
         county=lookup_result.county,
+        county_fips=lookup_result.county_fips,
         latitude=lookup_result.latitude,
         longitude=lookup_result.longitude,
         default_zoom=lookup_result.default_zoom,

@@ -217,7 +217,41 @@ def test_zip_lookup_returns_local_location_data() -> None:
     assert lookup.city == "Portage"
     assert lookup.state == "MI"
     assert lookup.county == "Kalamazoo"
+    assert lookup.county_fips is None
     assert lookup.default_zoom == 9
+
+
+def test_zip_lookup_route_response_includes_county_fips(monkeypatch) -> None:
+    monkeypatch.setattr(
+        location_service,
+        "lookup_zip_code",
+        lambda zip_code: SimpleNamespace(
+            zip_code="10001",
+            city=None,
+            state="NY",
+            county="New York",
+            county_fips="36061",
+            latitude=40.750649,
+            longitude=-73.997298,
+            default_zoom=9,
+            source="census_gazetteer_zcta+hud_usps_zip_county",
+            source_year="2025",
+            source_version="2025_Gaz_zcta_national+HUD_USPS_2025_Q4",
+            dataset_version="2025_Gazetteer_ZCTA+HUD_USPS_ZIP_COUNTY_2025_Q4",
+            imported_at="2026-05-03T00:00:00+00:00",
+            location_type="zcta",
+            is_zcta=True,
+            confidence="approximate+hud_primary_county",
+        ),
+    )
+
+    lookup = locations_route.lookup_zip_code("10001")
+
+    assert lookup.zip_code == "10001"
+    assert lookup.city is None
+    assert lookup.state == "NY"
+    assert lookup.county == "New York"
+    assert lookup.county_fips == "36061"
 
 
 def test_zip_lookup_preserves_seed_metadata_for_49005() -> None:

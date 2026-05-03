@@ -74,9 +74,17 @@ def import_location_lookup(
     zcta_source_year: str | None = None,
     zcta_source_version: str | None = None,
     zcta_dataset_version: str | None = None,
+    hud_zip_county_path: Path | None = None,
+    hud_source_year: str | None = None,
+    hud_source_quarter: str | None = None,
+    hud_source_version: str | None = None,
+    hud_dataset_version: str | None = None,
+    county_reference_path: Path | None = None,
 ) -> dict[str, Any]:
     generated_at = datetime.now(UTC).isoformat()
     effective_dataset_version = dataset_version or source_version
+    hud_enrichment_stats: dict[str, Any] | None = None
+    county_reference_metadata: dict[str, Any] | None = None
     records = _load_records(
         source_json,
         source_name,
@@ -98,6 +106,27 @@ def import_location_lookup(
             "census-zcta-gazetteer",
         )
         records = _merge_seed_and_zcta_records(records, zcta_records)
+    if hud_zip_county_path is not None:
+        county_reference = {}
+        county_reference_rows = 0
+        if county_reference_path is not None:
+            county_reference, county_reference_rows = _load_census_county_reference(county_reference_path)
+            county_reference_metadata = {
+                "path": county_reference_path.as_posix(),
+                "source_name": "census_gazetteer_counties",
+                "checksum_sha256": _sha256_file(county_reference_path),
+                "rows_processed": county_reference_rows,
+            }
+        hud_candidates = _load_hud_zip_county_records(hud_zip_county_path)
+        effective_hud_dataset_version = hud_dataset_version or hud_source_version
+        records, hud_enrichment_stats = _enrich_records_with_hud_zip_counties(
+            records,
+            hud_candidates,
+            county_reference,
+            hud_source_year,
+            hud_source_version,
+            effective_hud_dataset_version,
+        )
     output_db.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -121,6 +150,15 @@ def import_location_lookup(
             zcta_source_version,
             zcta_dataset_version or zcta_source_version,
         ),
+        "hud_usps_zip_county_source": _hud_zip_county_manifest_source(
+            hud_zip_county_path,
+            hud_source_year,
+            hud_source_quarter,
+            hud_source_version,
+            hud_dataset_version or hud_source_version,
+            hud_enrichment_stats,
+        ),
+        "county_reference_source": county_reference_metadata,
         "future_source_license": None,
         "generated_at": generated_at,
         "imported_at": generated_at,
@@ -276,6 +314,126 @@ def _load_census_zcta_gazetteer_records(source_path: Path) -> list[dict[str, Any
     return records
 
 
+def _load_hud_zip_county_records(source_path: Path) -> list[dict[str, Any]]:
+    rows = _load_delimited_rows(source_path, ",")
+    records: list[dict[str, Any]] = []
+    for index, row in enumerate(rows, start=1):
+        zip_code = _normalize_zip(_field(row, "ZIP", "zip"), index)
+        county_geoid = _normalize_county_geoid(_field(row, "COUNTY", "county"), index)
+        records.append(
+            {
+                "zip_code": zip_code,
+                "county_geoid": county_geoid,
+                "res_ratio": _optional_ratio(_field(row, "RES_RATIO", "res_ratio"), "RES_RATIO", index),
+                "tot_ratio": _optional_ratio(
+                    _field(row, "TOT_RATIO", "TOTAL_RATIO", "tot_ratio", "total_ratio"),
+                    "TOT_RATIO",
+                    index,
+                ),
+                "bus_ratio": _optional_ratio(_field(row, "BUS_RATIO", "bus_ratio"), "BUS_RATIO", index),
+                "oth_ratio": _optional_ratio(_field(row, "OTH_RATIO", "oth_ratio"), "OTH_RATIO", index),
+                "state": _normalize_state(_field(row, "USPS_ZIP_PREF_STATE", "STATE", "state"), index),
+            }
+        )
+    return records
+
+
+def _load_census_county_reference(source_path: Path) -> tuple[dict[str, dict[str, str | None]], int]:
+    rows = _load_delimited_rows(source_path, "|")
+    counties: dict[str, dict[str, str | None]] = {}
+    rows_processed = 0
+    for index, row in enumerate(rows, start=1):
+        geoid = _optional_text(_field(row, "GEOID", "county_fips", "COUNTY"))
+        if not geoid:
+            continue
+        county_geoid = _normalize_county_geoid(geoid, index)
+        state = _normalize_state(_field(row, "USPS", "state"), index)
+        county_name = _county_name(_field(row, "NAME", "county"))
+        counties[county_geoid] = {
+            "state": state,
+            "county": county_name,
+        }
+        rows_processed += 1
+    return counties, rows_processed
+
+
+def _load_delimited_rows(source_path: Path, default_delimiter: str) -> list[dict[str, Any]]:
+    text_lines: list[str] = []
+    if source_path.suffix.lower() == ".zip":
+        with zipfile.ZipFile(source_path) as archive:
+            text_members = [
+                name
+                for name in archive.namelist()
+                if name.lower().endswith((".csv", ".txt"))
+            ]
+            if not text_members:
+                raise ValueError(f"Reference ZIP contains no CSV or TXT files: {source_path}")
+            for member in sorted(text_members):
+                with archive.open(member) as raw_file:
+                    text_lines.extend(raw_file.read().decode("utf-8-sig").splitlines())
+    else:
+        text_lines = source_path.read_text(encoding="utf-8-sig").splitlines()
+
+    if not text_lines:
+        return []
+
+    delimiter = "|" if "|" in text_lines[0] else default_delimiter
+    reader = csv.DictReader(text_lines, delimiter=delimiter)
+    if not reader.fieldnames:
+        raise ValueError(f"Reference source must include a header row: {source_path}")
+    return [dict(row) for row in reader]
+
+
+def _field(row: dict[str, Any], *names: str) -> Any:
+    fields_by_normalized_name = {str(key).strip().upper(): value for key, value in row.items()}
+    for name in names:
+        value = fields_by_normalized_name.get(name.strip().upper())
+        if value is not None:
+            return value
+    return None
+
+
+def _normalize_county_geoid(value: Any, index: int) -> str:
+    county_geoid = _required_text(value, "county", index)
+    if county_geoid.isdigit():
+        county_geoid = county_geoid.zfill(5)
+    if len(county_geoid) != 5 or not county_geoid.isdigit():
+        raise ValueError(f"Record {index} has invalid county GEOID: {county_geoid!r}")
+    return county_geoid
+
+
+def _normalize_state(value: Any, index: int) -> str | None:
+    state = _optional_text(value)
+    if not state:
+        return None
+    state = state.upper()
+    if len(state) != 2 or not state.isalpha():
+        raise ValueError(f"Record {index} has invalid state: {state!r}")
+    return state
+
+
+def _optional_ratio(value: Any, field_name: str, index: int) -> float | None:
+    text = _optional_text(value)
+    if text is None:
+        return None
+    try:
+        ratio = float(text)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Record {index} has invalid {field_name}: {value!r}") from exc
+    if not math.isfinite(ratio):
+        raise ValueError(f"Record {index} has invalid {field_name}: {value!r}")
+    return ratio
+
+
+def _county_name(value: Any) -> str | None:
+    county = _optional_text(value)
+    if not county:
+        return None
+    if county.lower().endswith(" county"):
+        return county[:-7].strip() or county
+    return county
+
+
 def _merge_seed_and_zcta_records(
     seed_records: list[dict[str, Any]],
     zcta_records: list[dict[str, Any]],
@@ -290,6 +448,101 @@ def _merge_seed_and_zcta_records(
         records_by_zip[zcta_record["zip_code"]] = _merge_seed_record_with_zcta(existing, zcta_record)
 
     return [records_by_zip[zip_code] for zip_code in sorted(records_by_zip)]
+
+
+def _enrich_records_with_hud_zip_counties(
+    records: list[dict[str, Any]],
+    hud_candidates: list[dict[str, Any]],
+    county_reference: dict[str, dict[str, str | None]],
+    hud_source_year: str | None,
+    hud_source_version: str | None,
+    hud_dataset_version: str | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    candidates_by_zip: dict[str, list[dict[str, Any]]] = {}
+    for candidate in hud_candidates:
+        candidates_by_zip.setdefault(candidate["zip_code"], []).append(candidate)
+
+    records_by_zip = {record["zip_code"]: dict(record) for record in records}
+    matched_zip_count = 0
+    enriched_zip_count = 0
+    seed_preserved_count = 0
+    conflict_count = 0
+
+    for zip_code, candidates in candidates_by_zip.items():
+        record = records_by_zip.get(zip_code)
+        if record is None:
+            continue
+        matched_zip_count += 1
+        original_record = dict(record)
+        primary_candidate = _primary_hud_county_candidate(candidates)
+        county_ref = county_reference.get(primary_candidate["county_geoid"], {})
+        hud_state = county_ref.get("state") or primary_candidate.get("state")
+        hud_county = county_ref.get("county")
+        county_geoid = primary_candidate["county_geoid"]
+
+        if record.get("state") and hud_state and record["state"] != hud_state:
+            conflict_count += 1
+        elif record.get("county") and hud_county and _county_name(record["county"]) != _county_name(hud_county):
+            conflict_count += 1
+
+        if not record.get("county_fips"):
+            record["county_fips"] = county_geoid
+        if not record.get("state") and hud_state:
+            record["state"] = hud_state
+        if not record.get("county") and hud_county:
+            record["county"] = hud_county
+
+        if record != original_record:
+            enriched_zip_count += 1
+            record["source"] = _combine_labels(record.get("source"), "hud_usps_zip_county")
+            record["source_year"] = _combine_labels(record.get("source_year"), hud_source_year)
+            record["source_version"] = _combine_labels(record.get("source_version"), hud_source_version)
+            record["dataset_version"] = _combine_labels(record.get("dataset_version"), hud_dataset_version)
+            record["confidence"] = _combine_labels(record.get("confidence"), "hud_primary_county")
+        if original_record.get("primary_city") or original_record.get("state") or original_record.get("county"):
+            seed_preserved_count += 1
+
+        records_by_zip[zip_code] = record
+
+    return [records_by_zip[zip_code] for zip_code in sorted(records_by_zip)], {
+        "rows_processed": len(hud_candidates),
+        "distinct_zips_processed": len(candidates_by_zip),
+        "matched_zips": matched_zip_count,
+        "enriched_zips": enriched_zip_count,
+        "multi_county_zip_count": sum(
+            1
+            for candidates in candidates_by_zip.values()
+            if len({candidate["county_geoid"] for candidate in candidates}) > 1
+        ),
+        "seed_preserved_count": seed_preserved_count,
+        "conflict_count": conflict_count,
+        "limitations": [
+            "HUD-USPS ZIP-County rows relate USPS ZIP Codes to counties using address ratios.",
+            "HUD-USPS ZIP-County data is not authoritative postal city-name data; city fields are ignored.",
+            "ZIP Codes can span multiple counties; Molecast stores one deterministic primary county.",
+            "HUD-USPS crosswalk files may omit some USPS ZIP Codes.",
+            "This import enriches only existing Molecast lookup rows with coordinates.",
+        ],
+    }
+
+
+def _primary_hud_county_candidate(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            -_ratio_sort_value(candidate.get("res_ratio")),
+            -_ratio_sort_value(candidate.get("tot_ratio")),
+            -_ratio_sort_value(candidate.get("bus_ratio")),
+            -_ratio_sort_value(candidate.get("oth_ratio")),
+            candidate["county_geoid"],
+        ),
+    )[0]
+
+
+def _ratio_sort_value(value: Any) -> float:
+    if value is None:
+        return -1.0
+    return float(value)
 
 
 def _merge_seed_record_with_zcta(seed_record: dict[str, Any], zcta_record: dict[str, Any]) -> dict[str, Any]:
@@ -521,6 +774,29 @@ def _zcta_manifest_source(
     }
 
 
+def _hud_zip_county_manifest_source(
+    hud_zip_county_path: Path | None,
+    source_year: str | None,
+    source_quarter: str | None,
+    source_version: str | None,
+    dataset_version: str | None,
+    enrichment_stats: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if hud_zip_county_path is None:
+        return None
+    return {
+        "path": hud_zip_county_path.as_posix(),
+        "source_name": "hud_usps_zip_county",
+        "source_year": source_year,
+        "source_quarter": source_quarter,
+        "source_version": source_version,
+        "dataset_version": dataset_version,
+        "checksum_sha256": _sha256_file(hud_zip_county_path),
+        "download_url": "https://www.huduser.gov/portal/datasets/usps_crosswalk.html",
+        **(enrichment_stats or {}),
+    }
+
+
 def _parse_args() -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[1]
     default_data_dir = repo_root / "backend" / "app" / "data"
@@ -537,6 +813,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--zcta-source-year", default=None)
     parser.add_argument("--zcta-source-version", default=None)
     parser.add_argument("--zcta-dataset-version", default=None)
+    parser.add_argument("--hud-zip-county-input", type=Path, default=None)
+    parser.add_argument("--hud-source-year", default=None)
+    parser.add_argument("--hud-source-quarter", default=None)
+    parser.add_argument("--hud-source-version", default=None)
+    parser.add_argument("--hud-dataset-version", default=None)
+    parser.add_argument("--county-reference-input", type=Path, default=None)
     parser.add_argument(
         "--sentinel-zip",
         dest="sentinel_zip_codes",
@@ -563,6 +845,12 @@ def main() -> int:
         zcta_source_year=args.zcta_source_year,
         zcta_source_version=args.zcta_source_version,
         zcta_dataset_version=args.zcta_dataset_version,
+        hud_zip_county_path=args.hud_zip_county_input,
+        hud_source_year=args.hud_source_year,
+        hud_source_quarter=args.hud_source_quarter,
+        hud_source_version=args.hud_source_version,
+        hud_dataset_version=args.hud_dataset_version,
+        county_reference_path=args.county_reference_input,
     )
     print(
         "Imported "
