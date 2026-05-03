@@ -217,7 +217,7 @@ def test_zip_lookup_returns_local_location_data() -> None:
     assert lookup.city == "Portage"
     assert lookup.state == "MI"
     assert lookup.county == "Kalamazoo"
-    assert lookup.county_fips is None
+    assert lookup.county_fips == "26077"
     assert lookup.default_zoom == 9
 
 
@@ -266,20 +266,21 @@ def test_zip_lookup_preserves_seed_metadata_for_49005() -> None:
     assert lookup.is_zcta is False
 
 
-def test_zip_lookup_returns_non_michigan_zcta_with_partial_metadata() -> None:
+def test_zip_lookup_returns_non_michigan_zcta_with_hud_county_metadata() -> None:
     lookup = locations_route.lookup_zip_code("90210")
 
     assert lookup.zip_code == "90210"
     assert lookup.city is None
-    assert lookup.state is None
-    assert lookup.county is None
+    assert lookup.state == "CA"
+    assert lookup.county == "Los Angeles"
+    assert lookup.county_fips == "06037"
     assert lookup.latitude == 34.100517
     assert lookup.longitude == -118.41463
-    assert lookup.source == "census_gazetteer_zcta"
+    assert lookup.source == "census_gazetteer_zcta+hud_usps_zip_county"
     assert lookup.source_year == "2025"
     assert lookup.location_type == "zcta"
     assert lookup.is_zcta is True
-    assert lookup.confidence == "approximate"
+    assert lookup.confidence == "approximate+hud_primary_county"
 
 
 def test_legacy_zip_lookup_route_returns_local_location_data() -> None:

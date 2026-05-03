@@ -2,6 +2,17 @@
 
 Molecast release notes will be tracked here.
 
+## 0.5.3 - 2026-05-03
+
+- Added the real Census 2025 county Gazetteer reference file for county FIPS to county/state mapping.
+- Added real HUD-USPS ZIP-County 2025 Q4 source data and converted the token-free HUD API response to the documented CSV import format.
+- Rebuilt `backend/app/data/location_lookup.sqlite3` with HUD county/state enrichment and updated `backend/app/data/location_lookup_manifest.json`.
+- Enriched 33,719 ZIP/ZCTA lookup rows with county/state/`county_fips` where available.
+- Preserved curated seed city/state/county metadata for `49002` and `49005`.
+- Preserved Census ZCTA latitude/longitude metadata and kept HUD city fields ignored so Molecast does not fake postal city names.
+- Confirmed `10001` now resolves to NY / New York / `county_fips=36061`, and `90210` resolves to CA / Los Angeles / `county_fips=06037`.
+- Kept `test/alerts_test.json` clean and confirmed the HUD token was not written to files.
+
 ## 0.5.2 - 2026-05-03
 
 - Added explicit/offline importer support for HUD-USPS ZIP-County enrichment as a foundation for county/state metadata on ZCTA-backed lookup rows.

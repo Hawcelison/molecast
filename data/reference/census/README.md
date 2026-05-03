@@ -36,5 +36,7 @@ Molecast v0.5.2 HUD-USPS ZIP-County enrichment expects a Census county Gazetteer
 - `2025_Gaz_counties_national.zip`
 - Census download URL: `https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2025_Gazetteer/2025_Gaz_counties_national.zip`
 - Expected local path: `data/reference/census/2025_Gaz_counties_national.zip`
+- Downloaded for Molecast v0.5.3 on 2026-05-03.
+- SHA-256: `4c90d0f805779923b5958ab13d0c1e9b99fe4932b786bfcf75dd739bb2dcb4ea`
 
 The importer uses county `GEOID` to map HUD `COUNTY` values to county names and `USPS` state abbreviations. If the HUD county FIPS is not present in this reference, Molecast may still preserve `county_fips` and derivable state data, but it will not fake a county name.

@@ -1,9 +1,39 @@
 {
-  "checksum_sha256": "cc025544de005fe6b3a8cdb02ce482e78e70ef2d5016a36cae5d556f4cb1d0b3",
+  "checksum_sha256": "fdf83e8630b2823f87e07a688e884a179a5039049533adc8c6612fe01238a70a",
+  "county_reference_source": {
+    "checksum_sha256": "4c90d0f805779923b5958ab13d0c1e9b99fe4932b786bfcf75dd739bb2dcb4ea",
+    "path": "data/reference/census/2025_Gaz_counties_national.zip",
+    "rows_processed": 3222,
+    "source_name": "census_gazetteer_counties"
+  },
   "dataset_version": "phase-1-seed",
   "future_source_license": null,
-  "generated_at": "2026-05-03T10:44:26.162667+00:00",
-  "imported_at": "2026-05-03T10:44:26.162667+00:00",
+  "generated_at": "2026-05-03T12:17:21.080511+00:00",
+  "hud_usps_zip_county_source": {
+    "checksum_sha256": "e6d281058e333003b4fe0a0364f9f129949a94fcf53d325450467f0161b8cbcd",
+    "conflict_count": 0,
+    "dataset_version": "HUD_USPS_ZIP_COUNTY_2025_Q4",
+    "distinct_zips_processed": 39494,
+    "download_url": "https://www.huduser.gov/portal/datasets/usps_crosswalk.html",
+    "enriched_zips": 33719,
+    "limitations": [
+      "HUD-USPS ZIP-County rows relate USPS ZIP Codes to counties using address ratios.",
+      "HUD-USPS ZIP-County data is not authoritative postal city-name data; city fields are ignored.",
+      "ZIP Codes can span multiple counties; Molecast stores one deterministic primary county.",
+      "HUD-USPS crosswalk files may omit some USPS ZIP Codes.",
+      "This import enriches only existing Molecast lookup rows with coordinates."
+    ],
+    "matched_zips": 33719,
+    "multi_county_zip_count": 11369,
+    "path": "data/reference/hud_usps/2025_Q4/ZIP_COUNTY_2025_Q4.csv",
+    "rows_processed": 54571,
+    "seed_preserved_count": 2,
+    "source_name": "hud_usps_zip_county",
+    "source_quarter": "Q4",
+    "source_version": "HUD_USPS_2025_Q4",
+    "source_year": "2025"
+  },
+  "imported_at": "2026-05-03T12:17:21.080511+00:00",
   "notes": [
     "Seed JSON rows preserve curated city/state/county metadata for current development ZIPs.",
     "Census Gazetteer ZCTA rows provide broad offline ZIP-style coordinate coverage.",

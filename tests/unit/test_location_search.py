@@ -273,20 +273,21 @@ def test_existing_zip_lookup_routes_remain_compatible() -> None:
     assert locations_route.lookup_zip_code("49005").city == "Kalamazoo"
 
 
-def test_zip_lookup_returns_imported_zcta_with_partial_metadata() -> None:
+def test_zip_lookup_returns_imported_zcta_with_hud_county_metadata() -> None:
     response = locations_route.lookup_zip_code("10001")
 
     assert response.zip_code == "10001"
     assert response.city is None
-    assert response.state is None
-    assert response.county is None
+    assert response.state == "NY"
+    assert response.county == "New York"
+    assert response.county_fips == "36061"
     assert response.latitude == 40.750649
     assert response.longitude == -73.997298
-    assert response.source == "census_gazetteer_zcta"
+    assert response.source == "census_gazetteer_zcta+hud_usps_zip_county"
     assert response.source_year == "2025"
     assert response.location_type == "zcta"
     assert response.is_zcta is True
-    assert response.confidence == "approximate"
+    assert response.confidence == "approximate+hud_primary_county"
 
 
 def test_search_endpoint_returns_zcta_only_zip_without_metadata_crash() -> None:
@@ -295,10 +296,10 @@ def test_search_endpoint_returns_zcta_only_zip_without_metadata_crash() -> None:
     assert response.count >= 1
     result = response.results[0]
     assert result.ref == "zip:10001"
-    assert result.label == "10001 - ZCTA centroid"
+    assert result.label == "10001 - NY - New York County"
     assert result.city is None
-    assert result.state is None
-    assert result.county is None
+    assert result.state == "NY"
+    assert result.county == "New York County"
     assert result.latitude == 40.750649
     assert result.longitude == -73.997298
 
@@ -306,6 +307,6 @@ def test_search_endpoint_returns_zcta_only_zip_without_metadata_crash() -> None:
 def test_zip_lookup_route_response_includes_dataset_metadata() -> None:
     response = locations_route.lookup_zip_code("49002")
 
-    assert response.source == "molecast-seed-zip-codes-json+census_gazetteer_zcta"
-    assert response.dataset_version == "phase-1-seed+2025_Gazetteer_ZCTA"
+    assert response.source == "molecast-seed-zip-codes-json+census_gazetteer_zcta+hud_usps_zip_county"
+    assert response.dataset_version == "phase-1-seed+2025_Gazetteer_ZCTA+HUD_USPS_ZIP_COUNTY_2025_Q4"
     assert response.imported_at
