@@ -61,13 +61,66 @@ def test_importer_creates_lookup_database_from_zip_json(tmp_path: Path) -> None:
     with sqlite3.connect(output_db) as connection:
         row = connection.execute(
             """
-            SELECT zip_code, primary_city, state, county, default_zoom, source, source_year
+            SELECT
+                zip_code,
+                primary_city,
+                state,
+                county,
+                default_zoom,
+                source,
+                source_year,
+                source_version,
+                dataset_version,
+                imported_at
             FROM zip_locations
             WHERE zip_code = '49002'
             """
         ).fetchone()
 
-    assert row == ("49002", "Portage", "MI", "Kalamazoo", 9, "test-seed", "2026")
+    assert row[:9] == ("49002", "Portage", "MI", "Kalamazoo", 9, "test-seed", "2026", "test", "test")
+    assert row[9]
+
+
+def test_importer_supports_csv_source_and_sentinel_validation(tmp_path: Path) -> None:
+    source_csv = tmp_path / "zip_codes.csv"
+    output_db = tmp_path / "location_lookup.sqlite3"
+    manifest_path = tmp_path / "location_lookup_manifest.json"
+    source_csv.write_text(
+        "\n".join(
+            [
+                "zip_code,primary_city,state,county,latitude,longitude,timezone,source,source_version,dataset_version,is_zcta,confidence",
+                "10001,New York,NY,New York,40.7506,-73.9972,America/New_York,test-csv,2026q1,2026q1,1,zcta",
+                "49002,Portage,MI,Kalamazoo,42.2012,-85.58,America/Detroit,test-csv,2026q1,2026q1,0,usps",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    manifest = import_location_lookup(
+        source_json=source_csv,
+        output_db=output_db,
+        manifest_path=manifest_path,
+        source_name="test-csv",
+        source_year="2026",
+        source_version="2026q1",
+        source_format="csv",
+        sentinel_zip_codes=["49002", "10001"],
+    )
+    record = LocationLookupRepository(output_db).lookup_zip("10001")
+
+    assert manifest["row_counts"]["zip_locations"] == 2
+    assert manifest["dataset_version"] == "2026q1"
+    assert record is not None
+    assert record.zip_code == "10001"
+    assert record.primary_city == "New York"
+    assert record.state == "NY"
+    assert record.source == "test-csv"
+    assert record.source_version == "2026q1"
+    assert record.dataset_version == "2026q1"
+    assert record.imported_at
+    assert record.is_zcta is True
+    assert record.confidence == "zcta"
 
 
 def test_repository_returns_exact_zip_record(tmp_path: Path) -> None:
@@ -86,6 +139,9 @@ def test_repository_returns_exact_zip_record(tmp_path: Path) -> None:
     assert record.county == "Kalamazoo"
     assert record.latitude == 42.2918
     assert record.longitude == -85.5874
+    assert record.source == "test-seed"
+    assert record.dataset_version == "test"
+    assert record.imported_at
 
 
 def test_repository_returns_nearest_zip_within_preview_range(tmp_path: Path) -> None:
@@ -137,7 +193,8 @@ def test_zip_lookup_service_keeps_frontend_response_contract(tmp_path: Path) -> 
     lookup = service.lookup(" 49002 ")
 
     assert lookup is not None
-    assert lookup.model_dump() == {
+    lookup_payload = lookup.model_dump()
+    assert lookup_payload == {
         "zip_code": "49002",
         "city": "Portage",
         "state": "MI",
@@ -145,4 +202,13 @@ def test_zip_lookup_service_keeps_frontend_response_contract(tmp_path: Path) -> 
         "latitude": 42.2012,
         "longitude": -85.58,
         "default_zoom": 9,
+        "source": "test-seed",
+        "source_year": None,
+        "source_version": "test",
+        "dataset_version": "test",
+        "imported_at": lookup_payload["imported_at"],
+        "location_type": "zip",
+        "is_zcta": False,
+        "confidence": "seed",
     }
+    assert lookup_payload["imported_at"]

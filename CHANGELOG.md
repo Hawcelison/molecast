@@ -2,6 +2,16 @@
 
 Molecast release notes will be tracked here.
 
+## 0.5.0 - 2026-05-03
+
+- Added ZIP lookup metadata foundation for full USA ZIP support.
+- Extended the local lookup schema, repository, and ZIP API response with source, version, and import metadata.
+- Added CSV import support while preserving the existing JSON seed import and atomic SQLite rebuild behavior.
+- Regenerated the bundled lookup database with the current small `49002` and `49005` seed rows only.
+- Preserved existing `49002` and `49005` ZIP lookup behavior and the legacy `/api/location/lookup/{zip_code}` route.
+- Added tests for CSV import, metadata fields, non-Michigan fixture ZIPs, unknown and invalid ZIP behavior, city search from imported data, and ZIP lookup hygiene.
+- Kept address lookup provider-based; no nationwide ZIP dataset was imported in this release.
+
 ## 0.4.1 - 2026-05-03
 
 - Improved map-pick preview responsiveness by aborting stale in-flight preview requests when a new preview selection starts.

@@ -24,6 +24,14 @@ class ZipCodeLookupResult(BaseModel):
     latitude: float
     longitude: float
     default_zoom: int = Field(default=9, ge=0, le=22)
+    source: str | None = None
+    source_year: str | None = None
+    source_version: str | None = None
+    dataset_version: str | None = None
+    imported_at: str | None = None
+    location_type: str | None = None
+    is_zcta: bool = False
+    confidence: str | None = None
 
 
 class ZipCodeProvider(Protocol):
@@ -48,6 +56,14 @@ class SQLiteZipCodeProvider:
             latitude=record.latitude,
             longitude=record.longitude,
             default_zoom=record.default_zoom,
+            source=record.source,
+            source_year=record.source_year,
+            source_version=record.source_version,
+            dataset_version=record.dataset_version,
+            imported_at=record.imported_at,
+            location_type=record.location_type,
+            is_zcta=record.is_zcta,
+            confidence=record.confidence,
         )
 
 

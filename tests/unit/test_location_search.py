@@ -209,6 +209,42 @@ def test_search_service_caps_large_limit(tmp_path: Path) -> None:
     assert response.results[-1].ref == "zip:10019"
 
 
+def test_city_search_uses_imported_csv_city_rows(tmp_path: Path) -> None:
+    source_csv = tmp_path / "zip_codes.csv"
+    output_db = tmp_path / "location_lookup.sqlite3"
+    manifest_path = tmp_path / "location_lookup_manifest.json"
+    source_csv.write_text(
+        "\n".join(
+            [
+                "zip_code,primary_city,state,county,latitude,longitude,source,source_version,dataset_version",
+                "10001,New York,NY,New York,40.7506,-73.9972,test-csv,2026q1,2026q1",
+                "90210,Beverly Hills,CA,Los Angeles,34.0901,-118.4065,test-csv,2026q1,2026q1",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    import_location_lookup(
+        source_csv,
+        output_db,
+        manifest_path,
+        "test-csv",
+        "2026",
+        "2026q1",
+        source_format="csv",
+        sentinel_zip_codes=["10001", "90210"],
+    )
+    service = LocationResolverService(LocationLookupRepository(output_db))
+
+    response = service.search("Beverly", limit=8, types="city")
+
+    assert response.count == 1
+    assert response.results[0].kind == "city"
+    assert response.results[0].city == "Beverly Hills"
+    assert response.results[0].state == "CA"
+    assert response.results[0].county == "Los Angeles County"
+
+
 def test_search_endpoint_unknown_query_returns_empty_results() -> None:
     response = locations_route.search_locations(q="zzzzzz", limit=8, search_type=None)
 
@@ -235,3 +271,11 @@ def test_search_endpoint_rejects_invalid_type_filter() -> None:
 def test_existing_zip_lookup_routes_remain_compatible() -> None:
     assert locations_route.lookup_zip_code("49002").city == "Portage"
     assert locations_route.lookup_zip_code("49005").city == "Kalamazoo"
+
+
+def test_zip_lookup_route_response_includes_dataset_metadata() -> None:
+    response = locations_route.lookup_zip_code("49002")
+
+    assert response.source == "molecast-seed-zip-codes-json"
+    assert response.dataset_version == "phase-1-seed"
+    assert response.imported_at

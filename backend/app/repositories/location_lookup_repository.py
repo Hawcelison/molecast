@@ -22,6 +22,9 @@ class ZipLocationRecord:
     default_zoom: int
     source: str | None
     source_year: str | None
+    source_version: str | None
+    dataset_version: str | None
+    imported_at: str | None
     location_type: str | None
     is_zcta: bool
     confidence: str | None
@@ -36,6 +39,9 @@ class CityLocationRecord:
     longitude: float
     default_zoom: int
     source: str | None
+    source_version: str | None
+    dataset_version: str | None
+    imported_at: str | None
     confidence: str | None
 
 
@@ -64,6 +70,9 @@ class LocationLookupRepository:
                         default_zoom,
                         source,
                         source_year,
+                        source_version,
+                        dataset_version,
+                        imported_at,
                         location_type,
                         is_zcta,
                         confidence
@@ -90,6 +99,9 @@ class LocationLookupRepository:
             default_zoom=row["default_zoom"] or 9,
             source=row["source"],
             source_year=row["source_year"],
+            source_version=row["source_version"],
+            dataset_version=row["dataset_version"],
+            imported_at=row["imported_at"],
             location_type=row["location_type"],
             is_zcta=bool(row["is_zcta"]),
             confidence=row["confidence"],
@@ -116,6 +128,9 @@ class LocationLookupRepository:
                         default_zoom,
                         source,
                         source_year,
+                        source_version,
+                        dataset_version,
+                        imported_at,
                         location_type,
                         is_zcta,
                         confidence
@@ -164,6 +179,9 @@ class LocationLookupRepository:
                         longitude,
                         default_zoom,
                         source,
+                        source_version,
+                        dataset_version,
+                        imported_at,
                         confidence
                     FROM city_locations
                     WHERE {where_clause}
@@ -223,6 +241,9 @@ class LocationLookupRepository:
                         default_zoom,
                         source,
                         source_year,
+                        source_version,
+                        dataset_version,
+                        imported_at,
                         location_type,
                         is_zcta,
                         confidence
@@ -267,6 +288,9 @@ class LocationLookupRepository:
             default_zoom=row["default_zoom"] or 9,
             source=row["source"],
             source_year=row["source_year"],
+            source_version=row["source_version"],
+            dataset_version=row["dataset_version"],
+            imported_at=row["imported_at"],
             location_type=row["location_type"],
             is_zcta=bool(row["is_zcta"]),
             confidence=row["confidence"],
@@ -281,6 +305,9 @@ class LocationLookupRepository:
             longitude=row["longitude"],
             default_zoom=row["default_zoom"] or 9,
             source=row["source"],
+            source_version=row["source_version"],
+            dataset_version=row["dataset_version"],
+            imported_at=row["imported_at"],
             confidence=row["confidence"],
         )
 

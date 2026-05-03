@@ -99,3 +99,11 @@ class ZipLookupResponse(BaseModel):
     latitude: float
     longitude: float
     default_zoom: int = Field(default=9, ge=0, le=22)
+    source: str | None = None
+    source_year: str | None = None
+    source_version: str | None = None
+    dataset_version: str | None = None
+    imported_at: str | None = None
+    location_type: str | None = None
+    is_zcta: bool = False
+    confidence: str | None = None

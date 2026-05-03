@@ -1,4 +1,6 @@
+import hashlib
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -238,8 +240,47 @@ def test_zip_lookup_rejects_invalid_format() -> None:
         location_service.lookup_zip_code("49A02")
 
 
+def test_zip_lookup_route_returns_422_for_invalid_zip() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        locations_route.lookup_zip_code("49A02")
+
+    assert exc_info.value.status_code == 422
+
+
 def test_zip_lookup_returns_none_for_unknown_zip() -> None:
     assert location_service.lookup_zip_code("99999") is None
+
+
+def test_zip_lookup_route_returns_404_for_unknown_zip() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        locations_route.lookup_zip_code("99999")
+
+    assert exc_info.value.status_code == 404
+
+
+def test_zip_lookup_route_does_not_mutate_active_location(db) -> None:
+    settings = _settings()
+    active_location = location_service.get_active_location(db, settings)
+    original_payload = location_service.location_to_dict(active_location, settings)
+
+    lookup = locations_route.lookup_zip_code("49005")
+
+    refreshed_payload = location_service.location_to_dict(
+        location_service.get_active_location(db, settings),
+        settings,
+    )
+    assert lookup.zip_code == "49005"
+    assert refreshed_payload == original_payload
+
+
+def test_zip_lookup_does_not_modify_test_alert_fixture() -> None:
+    fixture_path = Path("test/alerts_test.json")
+    before = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+
+    locations_route.lookup_zip_code("49002")
+
+    after = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+    assert after == before
 
 
 def test_nws_point_preview_reuses_points_service_and_maps_grr_office() -> None:

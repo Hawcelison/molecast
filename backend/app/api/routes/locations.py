@@ -111,6 +111,14 @@ def _lookup_zip_code_response(zip_code: str) -> ZipLookupResponse:
         latitude=lookup_result.latitude,
         longitude=lookup_result.longitude,
         default_zoom=lookup_result.default_zoom,
+        source=lookup_result.source,
+        source_year=lookup_result.source_year,
+        source_version=lookup_result.source_version,
+        dataset_version=lookup_result.dataset_version,
+        imported_at=lookup_result.imported_at,
+        location_type=lookup_result.location_type,
+        is_zcta=lookup_result.is_zcta,
+        confidence=lookup_result.confidence,
     )
 
 

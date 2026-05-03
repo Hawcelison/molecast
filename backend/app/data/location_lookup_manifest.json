@@ -1,7 +1,9 @@
 {
-  "checksum_sha256": "2955eb308e727258b1a1f9ab4e4d074fa33ed52f23dfe93fb8f60cdc807814fb",
+  "checksum_sha256": "bcecf1104e668dcdf55d3a5e9fd79d060a2c1752fb28a338c2e71456be1720a1",
+  "dataset_version": "phase-1-seed",
   "future_source_license": null,
-  "generated_at": "2026-05-01T21:52:03.054573+00:00",
+  "generated_at": "2026-05-03T09:11:30.271790+00:00",
+  "imported_at": "2026-05-03T09:11:30.271790+00:00",
   "notes": [
     "Phase 1 lookup database is seeded from backend/app/data/zip_codes.json for current development parity.",
     "Future imports should replace this seed with licensed nationwide ZIP/city source data."

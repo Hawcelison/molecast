@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import math
@@ -25,6 +26,9 @@ CREATE TABLE zip_locations (
     default_zoom INTEGER NOT NULL DEFAULT 9,
     source TEXT,
     source_year TEXT,
+    source_version TEXT,
+    dataset_version TEXT,
+    imported_at TEXT,
     location_type TEXT,
     is_zcta INTEGER NOT NULL DEFAULT 0,
     confidence TEXT
@@ -43,6 +47,9 @@ CREATE TABLE city_locations (
     longitude REAL NOT NULL,
     default_zoom INTEGER NOT NULL DEFAULT 9,
     source TEXT,
+    source_version TEXT,
+    dataset_version TEXT,
+    imported_at TEXT,
     confidence TEXT,
     UNIQUE (primary_city, state, county)
 );
@@ -59,15 +66,28 @@ def import_location_lookup(
     source_name: str,
     source_year: str | None,
     source_version: str | None,
+    source_format: str = "auto",
+    dataset_version: str | None = None,
+    sentinel_zip_codes: list[str] | None = None,
 ) -> dict[str, Any]:
-    records = _load_records(source_json, source_name, source_year)
+    generated_at = datetime.now(UTC).isoformat()
+    effective_dataset_version = dataset_version or source_version
+    records = _load_records(
+        source_json,
+        source_name,
+        source_year,
+        source_version,
+        effective_dataset_version,
+        generated_at,
+        source_format,
+    )
     output_db.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
     temp_db_path = _temporary_path(output_db.parent, ".sqlite3.tmp")
     try:
         _write_database(temp_db_path, records)
-        _validate_database(temp_db_path, len(records))
+        _validate_database(temp_db_path, len(records), sentinel_zip_codes)
         temp_db_path.replace(output_db)
     finally:
         temp_db_path.unlink(missing_ok=True)
@@ -77,8 +97,10 @@ def import_location_lookup(
         "source_name": source_name,
         "source_year": source_year,
         "source_version": source_version,
+        "dataset_version": effective_dataset_version,
         "future_source_license": None,
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": generated_at,
+        "imported_at": generated_at,
         "row_counts": {
             "zip_locations": len(records),
             "city_locations": _city_location_count(output_db),
@@ -93,10 +115,18 @@ def import_location_lookup(
     return manifest
 
 
-def _load_records(source_json: Path, source_name: str, source_year: str | None) -> list[dict[str, Any]]:
-    raw_records = json.loads(source_json.read_text(encoding="utf-8"))
+def _load_records(
+    source_path: Path,
+    source_name: str,
+    source_year: str | None,
+    source_version: str | None,
+    dataset_version: str | None,
+    imported_at: str,
+    source_format: str,
+) -> list[dict[str, Any]]:
+    raw_records = _load_raw_records(source_path, source_format)
     if not isinstance(raw_records, list):
-        raise ValueError("ZIP source JSON must contain a list of records.")
+        raise ValueError("ZIP source must contain a list of records.")
 
     records: list[dict[str, Any]] = []
     seen_zip_codes: set[str] = set()
@@ -104,7 +134,15 @@ def _load_records(source_json: Path, source_name: str, source_year: str | None) 
         if not isinstance(raw_record, dict):
             raise ValueError(f"ZIP source record {index} must be an object.")
 
-        record = _normalize_record(raw_record, source_name, source_year, index)
+        record = _normalize_record(
+            raw_record,
+            source_name,
+            source_year,
+            source_version,
+            dataset_version,
+            imported_at,
+            index,
+        )
         if record["zip_code"] in seen_zip_codes:
             raise ValueError(f"Duplicate ZIP code: {record['zip_code']}")
         seen_zip_codes.add(record["zip_code"])
@@ -112,10 +150,36 @@ def _load_records(source_json: Path, source_name: str, source_year: str | None) 
     return records
 
 
+def _load_raw_records(source_path: Path, source_format: str) -> list[dict[str, Any]]:
+    resolved_format = source_format.lower()
+    if resolved_format == "auto":
+        suffix = source_path.suffix.lower()
+        if suffix == ".csv":
+            resolved_format = "csv"
+        elif suffix == ".json":
+            resolved_format = "json"
+        else:
+            raise ValueError(f"Cannot infer source format from extension: {source_path}")
+
+    if resolved_format == "json":
+        return json.loads(source_path.read_text(encoding="utf-8"))
+    if resolved_format == "csv":
+        with source_path.open(newline="", encoding="utf-8-sig") as csv_file:
+            reader = csv.DictReader(csv_file)
+            if not reader.fieldnames:
+                raise ValueError("ZIP source CSV must include a header row.")
+            return [dict(row) for row in reader]
+
+    raise ValueError(f"Unsupported source format: {source_format}")
+
+
 def _normalize_record(
     raw_record: dict[str, Any],
     source_name: str,
     source_year: str | None,
+    source_version: str | None,
+    dataset_version: str | None,
+    imported_at: str,
     index: int,
 ) -> dict[str, Any]:
     zip_code = _normalize_zip(raw_record.get("zip_code") or raw_record.get("zip"), index)
@@ -140,8 +204,11 @@ def _normalize_record(
         "default_zoom": default_zoom,
         "source": _optional_text(raw_record.get("source")) or source_name,
         "source_year": _optional_text(raw_record.get("source_year")) or source_year,
+        "source_version": _optional_text(raw_record.get("source_version")) or source_version,
+        "dataset_version": _optional_text(raw_record.get("dataset_version")) or dataset_version,
+        "imported_at": _optional_text(raw_record.get("imported_at")) or imported_at,
         "location_type": _optional_text(raw_record.get("location_type")) or "zip",
-        "is_zcta": 1 if raw_record.get("is_zcta") else 0,
+        "is_zcta": 1 if _truthy(raw_record.get("is_zcta")) else 0,
         "confidence": _optional_text(raw_record.get("confidence")) or "seed",
     }
 
@@ -167,6 +234,15 @@ def _optional_text(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = _optional_text(value)
+    if not text:
+        return False
+    return text.lower() in {"1", "true", "t", "yes", "y"}
 
 
 def _coordinate(value: Any, field_name: str, minimum: float, maximum: float, index: int) -> float:
@@ -209,6 +285,9 @@ def _write_database(db_path: Path, records: list[dict[str, Any]]) -> None:
                 default_zoom,
                 source,
                 source_year,
+                source_version,
+                dataset_version,
+                imported_at,
                 location_type,
                 is_zcta,
                 confidence
@@ -224,6 +303,9 @@ def _write_database(db_path: Path, records: list[dict[str, Any]]) -> None:
                 :default_zoom,
                 :source,
                 :source_year,
+                :source_version,
+                :dataset_version,
+                :imported_at,
                 :location_type,
                 :is_zcta,
                 :confidence
@@ -241,6 +323,9 @@ def _write_database(db_path: Path, records: list[dict[str, Any]]) -> None:
                 longitude,
                 default_zoom,
                 source,
+                source_version,
+                dataset_version,
+                imported_at,
                 confidence
             ) VALUES (
                 :primary_city,
@@ -250,6 +335,9 @@ def _write_database(db_path: Path, records: list[dict[str, Any]]) -> None:
                 :longitude,
                 :default_zoom,
                 :source,
+                :source_version,
+                :dataset_version,
+                :imported_at,
                 :confidence
             )
             """,
@@ -257,11 +345,23 @@ def _write_database(db_path: Path, records: list[dict[str, Any]]) -> None:
         )
 
 
-def _validate_database(db_path: Path, expected_zip_count: int) -> None:
+def _validate_database(
+    db_path: Path,
+    expected_zip_count: int,
+    sentinel_zip_codes: list[str] | None,
+) -> None:
     with sqlite3.connect(db_path) as connection:
         zip_count = connection.execute("SELECT COUNT(*) FROM zip_locations").fetchone()[0]
         if zip_count != expected_zip_count:
             raise ValueError(f"Expected {expected_zip_count} ZIP rows, imported {zip_count}.")
+        for zip_code in sentinel_zip_codes or []:
+            normalized_zip_code = _normalize_zip(zip_code, 0)
+            exists = connection.execute(
+                "SELECT 1 FROM zip_locations WHERE zip_code = ?",
+                (normalized_zip_code,),
+            ).fetchone()
+            if exists is None:
+                raise ValueError(f"Sentinel ZIP code missing after import: {normalized_zip_code}")
 
 
 def _city_location_count(db_path: Path) -> int:
@@ -304,6 +404,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--source-name", default="molecast-seed-zip-codes-json")
     parser.add_argument("--source-year", default=None)
     parser.add_argument("--source-version", default="phase-1-seed")
+    parser.add_argument("--source-format", choices=("auto", "json", "csv"), default="auto")
+    parser.add_argument("--dataset-version", default=None)
+    parser.add_argument(
+        "--sentinel-zip",
+        dest="sentinel_zip_codes",
+        action="append",
+        default=["49002", "49005"],
+        help="ZIP code that must exist after import. Repeat for multiple sentinels.",
+    )
     return parser.parse_args()
 
 
@@ -316,6 +425,9 @@ def main() -> int:
         source_name=args.source_name,
         source_year=args.source_year,
         source_version=args.source_version,
+        source_format=args.source_format,
+        dataset_version=args.dataset_version,
+        sentinel_zip_codes=args.sentinel_zip_codes,
     )
     print(
         "Imported "
