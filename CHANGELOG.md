@@ -2,6 +2,13 @@
 
 Molecast release notes will be tracked here.
 
+## 0.4.1 - 2026-05-03
+
+- Improved map-pick preview responsiveness by aborting stale in-flight preview requests when a new preview selection starts.
+- Suppressed duplicate in-flight preview requests for the same rounded coordinate.
+- Stopped map-pick mode before dispatching preview work for a selected point.
+- Preserved explicit Save behavior and kept preview actions from mutating the active location.
+
 ## 0.4.0 - 2026-05-03
 
 - Added map-click location preview from the active location editor.

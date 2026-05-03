@@ -13,6 +13,8 @@
     highlightedSearchIndex: -1,
     previewTimer: null,
     previewRequestId: 0,
+    previewAbortController: null,
+    previewCoordinateKey: null,
     activeMarker: null,
     activeMarkerRetryTimer: null,
     activeMarkerRetryCount: 0,
@@ -150,6 +152,11 @@
       window.clearTimeout(state.previewTimer);
       state.previewTimer = null;
     }
+    if (state.previewAbortController) {
+      state.previewAbortController.abort();
+      state.previewAbortController = null;
+    }
+    state.previewCoordinateKey = null;
     state.previewRequestId += 1;
   }
 
@@ -522,6 +529,10 @@
     }
   }
 
+  function previewCoordinateKey(latitude, longitude) {
+    return `${Number(latitude).toFixed(4)},${Number(longitude).toFixed(4)}`;
+  }
+
   function handlePreviewMarkerDragEnd() {
     if (!state.previewMarker || typeof state.previewMarker.getLngLat !== "function") {
       return;
@@ -681,12 +692,12 @@
         event.originalEvent.preventDefault();
         event.originalEvent.stopPropagation();
       }
+      stopMapPinPlacement({ preserveStatus: true });
       applyPreviewCoordinate(lngLat.lat, lngLat.lng, {
         shouldFocus: false,
         statusText: previewPinStatusText(),
         message: "Preview pin placed. Review and save to apply.",
       });
-      stopMapPinPlacement({ preserveStatus: true });
     };
     state.mapPlacementKeyHandler = function (event) {
       if (event.key !== "Escape") {
@@ -967,23 +978,33 @@
       return;
     }
 
+    const coordinateKey = previewCoordinateKey(latitude, longitude);
+    if (state.previewCoordinateKey === coordinateKey && (state.previewTimer || state.previewAbortController)) {
+      setNwsPreview("NWS preview: checking selected point...", "pending");
+      return;
+    }
+
     abortPendingPreview();
     const requestId = state.previewRequestId;
+    state.previewCoordinateKey = coordinateKey;
     setNwsPreview("NWS preview: checking selected point...", "pending");
 
     state.previewTimer = window.setTimeout(function () {
       state.previewTimer = null;
-      fetchNwsPreview(latitude, longitude, requestId);
+      fetchNwsPreview(latitude, longitude, requestId, coordinateKey);
     }, 150);
   }
 
-  async function fetchNwsPreview(latitude, longitude, requestId) {
+  async function fetchNwsPreview(latitude, longitude, requestId, coordinateKey) {
+    const controller = new AbortController();
+    state.previewAbortController = controller;
     try {
       const preview = await fetchJson("/api/location/points/preview", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        signal: controller.signal,
         body: JSON.stringify({
           latitude: Number(latitude),
           longitude: Number(longitude),
@@ -997,10 +1018,20 @@
         setMessage("Preview populated location details. Review and save to apply.", "success");
       }
     } catch (error) {
+      if (error.name === "AbortError") {
+        return;
+      }
       if (requestId !== state.previewRequestId) {
         return;
       }
       setNwsPreview(`NWS preview unavailable: ${error.message || "selected point could not be checked."}`, "warning");
+    } finally {
+      if (requestId === state.previewRequestId && state.previewAbortController === controller) {
+        state.previewAbortController = null;
+        if (state.previewCoordinateKey === coordinateKey) {
+          state.previewCoordinateKey = null;
+        }
+      }
     }
   }
 
