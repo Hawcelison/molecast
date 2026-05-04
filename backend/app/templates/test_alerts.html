@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="/static/js/test-alerts.js?v=test-editor-20260501b" defer></script>
+<script src="/static/js/test-alerts.js?v=test-editor-20260504-targets" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -135,7 +135,7 @@
       <section class="editor-subsection">
         <h3>Geometry</h3>
         <div class="form-row">
-          <label>Geometry mode<select id="geometry-alert-mode"><option value="polygon">Polygon</option><option value="zone">Zone</option><option value="none">None / banner only</option></select></label>
+          <label>Geometry mode<select id="geometry-alert-mode"><option value="polygon">Polygon - map geometry</option><option value="zone">Zone - affected NWS zones</option><option value="none">None / no geometry</option></select></label>
           <div class="geometry-button-row" aria-label="Test alert presets">
             <button type="button" id="preset-storm-polygon">Apply sample storm polygon</button>
             <button type="button" id="preset-severe-polygon">Apply sample severe polygon</button>
@@ -145,6 +145,7 @@
         </div>
         <p class="field-help">NWS GeoJSON uses longitude, latitude coordinate order.</p>
         <p class="field-help">Zone-based alerts may have no polygon; affected NWS zones are shaded instead.</p>
+        <p class="field-help">No geometry means no map geometry; target fields determine where the test alert applies.</p>
         <div id="polygon-mode-panel">
         <div class="form-row">
           <label>Shape type<select id="geometry-shape-type"><option value="rectangle">rectangle</option><option value="polygon">polygon</option></select></label>
@@ -177,6 +178,20 @@
             <label>geocode.UGC<input id="field-geocode-ugc" placeholder="MIZ072, MIC077"></label>
             <label>geocode.SAME<input id="field-geocode-same" placeholder="026077"></label>
           </div>
+        </div>
+      </section>
+
+      <section class="editor-subsection">
+        <h3>Targets</h3>
+        <p class="field-help">Explicit targets are authoritative for test-alert matching. Leave all target fields blank to use legacy active-location behavior.</p>
+        <div class="parameter-grid">
+          <label>ZIP codes<input id="field-target-zip-codes" placeholder="49002, 10001"></label>
+          <label>Saved location IDs<input id="field-target-location-ids" inputmode="numeric" placeholder="1, 4"></label>
+          <label>County FIPS<input id="field-target-county-fips" placeholder="26077, 36061"></label>
+          <label>County zones<input id="field-target-county-zones" placeholder="MIC077"></label>
+          <label>Forecast zones<input id="field-target-forecast-zones" placeholder="MIZ072"></label>
+          <label>SAME<input id="field-target-same" placeholder="026077"></label>
+          <label>UGC<input id="field-target-ugc" placeholder="MIC077, MIZ072"></label>
         </div>
       </section>
 

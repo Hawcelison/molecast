@@ -2,6 +2,18 @@
 
 Molecast release notes will be tracked here.
 
+## 0.7.2 - 2026-05-04
+
+- Added formal test-alert target metadata for nationwide saved-location alert testing.
+- Supported ZIP codes, saved location IDs, county FIPS, county zones, forecast zones, SAME, and UGC targets.
+- Normalized target values before saving or loading local test alerts.
+- Made explicit test-alert targets authoritative for active and saved-location matching.
+- Preserved `source=test` for local test alerts so they cannot impersonate NWS alerts.
+- Prevented a ZIP 10001-only test alert from appearing in active Portage/49002 banners unless the active location is explicitly targeted or spatially matched.
+- Applied explicit target matching to saved alert summaries while keeping blank/no-target alerts from matching every saved location.
+- Added a compact Targets section to the local test-alert editor and kept Polygon, Zone, and No Geometry modes working.
+- Preserved existing legacy no-target test alerts for active-location testing and kept `test/alerts_test.json` clean after validation.
+
 ## 0.7.1 - 2026-05-04
 
 - Implemented backend saved-location alert summary aggregation at `GET /api/alerts/summary?scope=saved`.

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app import constants
+from app.alerts.test_targets import normalize_test_alert_targets
 from app.alerts.test_alert_loader import resolve_relative_time_fields
 from app.config import settings
 from app.dependencies import get_db
@@ -198,7 +199,7 @@ def _validate_test_alert_payload(payload: Any) -> dict[str, Any]:
         if not isinstance(event, str) or not event.strip():
             raise _validation_error(f"Alert {alert_id} must include a non-empty string event.")
 
-        alert["source"] = alert.get("source") or "test"
+        alert["source"] = "test"
 
         enabled = alert.get("enabled")
         if enabled is None:
@@ -239,6 +240,14 @@ def _validate_test_alert_payload(payload: Any) -> dict[str, Any]:
         _validate_polygon_geometry(alert_id, geometry)
         _validate_affected_zones(alert_id, alert.get("affectedZones"))
         _validate_geocode(alert_id, alert.get("geocode"))
+        try:
+            normalized_targets = normalize_test_alert_targets(alert.get("targets"))
+        except ValueError as exc:
+            raise _validation_error(f"Alert {alert_id} {exc}") from exc
+        if normalized_targets is None:
+            alert.pop("targets", None)
+        else:
+            alert["targets"] = normalized_targets
 
         parameters = alert.get("parameters")
         if parameters is not None and not isinstance(parameters, dict):
@@ -272,7 +281,7 @@ def _read_payload(alert_file: Path) -> dict[str, Any]:
     alerts = payload.get("alerts")
     if isinstance(alerts, list):
         for alert in alerts:
-            if isinstance(alert, dict) and not alert.get("source"):
+            if isinstance(alert, dict):
                 alert["source"] = "test"
     return payload
 

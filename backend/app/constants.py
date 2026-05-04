@@ -2,7 +2,7 @@
 
 APP_NAME = "Molecast"
 # Default only. Runtime version is read through Settings.app_version from APP_VERSION.
-APP_VERSION = "0.7.1"
+APP_VERSION = "0.7.2"
 APP_VERSION_ENV_VAR = "APP_VERSION"
 APP_VERSION_SCHEME = "semver"
 CHANGELOG_FILE_NAME = "CHANGELOG.md"
@@ -22,12 +22,12 @@ DEFAULT_LOCATION_ZOOM = 9
 WEATHER_REFRESH_SECONDS = 900
 ALERT_REFRESH_SECONDS = 60
 NWS_ACTIVE_ALERTS_URL = "https://api.weather.gov/alerts/active"
-NWS_USER_AGENT = "Molecast/0.7.1"
+NWS_USER_AGENT = "Molecast/0.7.2"
 GEOCODER_PROVIDER = "census"
 CENSUS_GEOCODER_BASE_URL = "https://geocoding.geo.census.gov/geocoder"
 CENSUS_GEOCODER_BENCHMARK = "Public_AR_Current"
 GEOCODER_TIMEOUT_SECONDS = 5
-GEOCODER_USER_AGENT = "Molecast/0.7.1"
+GEOCODER_USER_AGENT = "Molecast/0.7.2"
 TEST_ALERTS_FILE = "test/alerts_test.json"
 LOG_RETENTION_DAYS = 7
 LOG_LEVEL = "INFO"

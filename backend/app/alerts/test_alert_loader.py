@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import Settings
+from app.alerts.test_targets import normalize_test_alert_targets
 from app.logging_config import get_logger
 from app.models.location import Location
 from app.services.alert_time import now_utc, parse_alert_time_utc
@@ -128,9 +129,15 @@ class TestAlertLoader:
         else:
             area_desc = raw_alert.get("areaDesc")
         effective, expires = resolve_relative_time_fields(raw_alert, now_utc())
+        try:
+            targets = normalize_test_alert_targets(raw_alert.get("targets"))
+        except ValueError:
+            self.logger.warning("Skipping enabled test alert with invalid targets: id=%s", alert_id, exc_info=True)
+            return None
+
         properties = {
             "id": alert_id,
-            "source": raw_alert.get("source") or "test",
+            "source": "test",
             "event": event,
             "severity": raw_alert.get("severity"),
             "urgency": raw_alert.get("urgency"),
@@ -145,6 +152,8 @@ class TestAlertLoader:
             "geocode": raw_alert.get("geocode"),
             "parameters": raw_alert.get("parameters"),
         }
+        if targets is not None:
+            properties["targets"] = targets
         effective_at = parse_alert_time_utc(properties["effective"])
         expires_at = parse_alert_time_utc(properties["expires"])
         self.logger.debug(

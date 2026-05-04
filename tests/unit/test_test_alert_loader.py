@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from app.alerts import test_alert_loader as loader_module
 from app.alerts.presentation import build_alert_presentation
+from app.alerts.test_targets import normalize_test_alert_targets
 from app.api.routes import test_alerts as test_alerts_route
 from app.models.location import Location
 from app.services import alert_service
@@ -17,9 +18,13 @@ def _location() -> Location:
         city="Portage",
         state="MI",
         county="Kalamazoo",
+        county_fips="26077",
         zip_code="49002",
         latitude=42.2012,
         longitude=-85.58,
+        county_zone="MIC077",
+        forecast_zone="MIZ072",
+        fire_weather_zone="MIZ072",
         is_primary=True,
     )
 
@@ -297,6 +302,184 @@ def test_loader_preserves_zone_alert_fields(tmp_path, monkeypatch) -> None:
     assert feature["geometry"] is None
     assert feature["properties"]["affectedZones"] == [zone_url]
     assert feature["properties"]["geocode"] == {"UGC": ["MIZ072"], "SAME": ["026077"]}
+
+
+def test_target_normalization_normalizes_supported_fields() -> None:
+    targets = normalize_test_alert_targets(
+        {
+            "zip_codes": ["49002-1234", 10001],
+            "location_ids": ["1", 4],
+            "county_fips": ["6077", "26077"],
+            "county_zones": ["mic077"],
+            "forecast_zones": ["https://api.weather.gov/zones/forecast/miz072"],
+            "same": ["26077"],
+            "ugc": ["mic077", "miz072"],
+        }
+    )
+
+    assert targets == {
+        "zip_codes": ["49002", "10001"],
+        "location_ids": [1, 4],
+        "county_fips": ["06077", "26077"],
+        "county_zones": ["MIC077"],
+        "forecast_zones": ["MIZ072"],
+        "same": ["026077"],
+        "ugc": ["MIC077", "MIZ072"],
+    }
+
+
+def test_editor_validation_normalizes_targets_and_forces_test_source() -> None:
+    payload = {
+        "alerts": [
+            _alert(
+                source="nws",
+                geometry=None,
+                targets={
+                    "zip_codes": ["49002-1234"],
+                    "location_ids": ["1"],
+                    "county_fips": ["26077"],
+                    "county_zones": ["mic077"],
+                    "forecast_zones": ["miz072"],
+                    "same": ["26077"],
+                    "ugc": ["mic077"],
+                },
+            )
+        ]
+    }
+
+    validated = test_alerts_route._validate_test_alert_payload(payload)
+
+    alert = validated["alerts"][0]
+    assert alert["source"] == "test"
+    assert alert["targets"] == {
+        "zip_codes": ["49002"],
+        "location_ids": [1],
+        "county_fips": ["26077"],
+        "county_zones": ["MIC077"],
+        "forecast_zones": ["MIZ072"],
+        "same": ["026077"],
+        "ugc": ["MIC077"],
+    }
+
+
+def test_loader_preserves_normalized_targets(tmp_path, monkeypatch) -> None:
+    current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)
+    alert_file = tmp_path / "alerts_test.json"
+    _write_payload(
+        alert_file,
+        _alert(
+            source="nws",
+            geometry=None,
+            targets={"zip_codes": ["49002-1234"], "forecast_zones": ["miz072"]},
+        ),
+    )
+
+    feature = loader_module.TestAlertLoader(_settings(alert_file)).load_enabled_alert_features(_location())[0]
+
+    assert feature["source"] == "test"
+    assert feature["properties"]["source"] == "test"
+    assert feature["properties"]["targets"] == {
+        "zip_codes": ["49002"],
+        "forecast_zones": ["MIZ072"],
+    }
+
+
+def test_zip_targeted_test_alert_matches_active_location_only_when_zip_matches(tmp_path, monkeypatch) -> None:
+    current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)
+    monkeypatch.setattr(alert_service, "now_utc", lambda: current_time)
+    alert_file = tmp_path / "alerts_test.json"
+    _write_payload(
+        alert_file,
+        _alert(
+            geometry=None,
+            areaDesc="Kalamazoo",
+            targets={"zip_codes": ["49002"]},
+            relative_time={
+                "effective_minutes_from_now": -5,
+                "expires_minutes_from_now": 90,
+            },
+        ),
+    )
+
+    features = loader_module.TestAlertLoader(_settings(alert_file)).load_enabled_alert_features(_location())
+    alerts = parse_nws_alerts({"features": features}, _location(), source="test")
+
+    assert [alert.id for alert in alerts] == ["relative-test-alert"]
+    assert alerts[0].match.match_type == "zip_code"
+
+
+def test_zip_targeted_test_alert_for_10001_does_not_match_active_49002(tmp_path, monkeypatch) -> None:
+    current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)
+    monkeypatch.setattr(alert_service, "now_utc", lambda: current_time)
+    alert_file = tmp_path / "alerts_test.json"
+    _write_payload(
+        alert_file,
+        _alert(
+            geometry=None,
+            areaDesc="Kalamazoo",
+            targets={"zip_codes": ["10001"]},
+            relative_time={
+                "effective_minutes_from_now": -5,
+                "expires_minutes_from_now": 90,
+            },
+        ),
+    )
+
+    features = loader_module.TestAlertLoader(_settings(alert_file)).load_enabled_alert_features(_location())
+    alerts = parse_nws_alerts({"features": features}, _location(), source="test")
+
+    assert alerts == []
+
+
+def test_explicit_targets_are_authoritative_over_area_desc_fallback(tmp_path, monkeypatch) -> None:
+    current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)
+    monkeypatch.setattr(alert_service, "now_utc", lambda: current_time)
+    alert_file = tmp_path / "alerts_test.json"
+    _write_payload(
+        alert_file,
+        _alert(
+            geometry=None,
+            areaDesc="Kalamazoo",
+            targets={"location_ids": [999]},
+            relative_time={
+                "effective_minutes_from_now": -5,
+                "expires_minutes_from_now": 90,
+            },
+        ),
+    )
+
+    features = loader_module.TestAlertLoader(_settings(alert_file)).load_enabled_alert_features(_location())
+    alerts = parse_nws_alerts({"features": features}, _location(), source="test")
+
+    assert alerts == []
+
+
+def test_no_target_legacy_test_alert_still_matches_active_area_desc(tmp_path, monkeypatch) -> None:
+    current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)
+    monkeypatch.setattr(alert_service, "now_utc", lambda: current_time)
+    alert_file = tmp_path / "alerts_test.json"
+    _write_payload(
+        alert_file,
+        _alert(
+            geometry=None,
+            areaDesc="Kalamazoo",
+            relative_time={
+                "effective_minutes_from_now": -5,
+                "expires_minutes_from_now": 90,
+            },
+        ),
+    )
+
+    features = loader_module.TestAlertLoader(_settings(alert_file)).load_enabled_alert_features(_location())
+    alerts = parse_nws_alerts({"features": features}, _location(), source="test")
+
+    assert [alert.id for alert in alerts] == ["relative-test-alert"]
+    assert alerts[0].match.match_type == "county"
 
 
 def test_zone_mode_test_alert_gets_affected_zone_fallback_geometry(tmp_path, monkeypatch) -> None:

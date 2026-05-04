@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.models.location import Location
+from app.alerts.test_targets import has_explicit_test_targets, match_test_targets_to_location
 
 
 STATE_NAMES_BY_ABBREVIATION = {
@@ -76,6 +77,13 @@ def match_alert_to_location(feature: dict[str, Any], location: Location) -> Aler
         )
 
     properties = feature.get("properties", {})
+    if not isinstance(properties, dict):
+        properties = {}
+
+    source = str(feature.get("source") or properties.get("source") or "").strip().lower()
+    if source == "test" and has_explicit_test_targets(properties):
+        return match_test_targets_to_location(properties.get("targets"), location)
+
     area_desc = properties.get("areaDesc") or ""
 
     county_match = match_area_desc_county(area_desc, location.county)

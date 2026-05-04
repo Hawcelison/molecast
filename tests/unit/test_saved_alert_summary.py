@@ -36,6 +36,7 @@ def _feature(
     affected_zones: list[str] | None = None,
     geocode: dict | None = None,
     parameters: dict | None = None,
+    targets: dict | None = None,
     geometry: dict | None = None,
 ) -> dict:
     return {
@@ -55,6 +56,7 @@ def _feature(
             "expires": "2099-01-01T00:00:00Z",
             "geocode": geocode or {},
             "parameters": parameters or {},
+            "targets": targets,
         },
         "geometry": geometry,
     }
@@ -185,6 +187,92 @@ def test_saved_summary_preserves_test_source_and_matches_zip_code_parameter() ->
     assert summary.alert_refs[0].affected_locations[0].match_type == "zip_code"
 
 
+def test_saved_summary_counts_zip_targeted_test_alert_for_saved_zip() -> None:
+    locations = [_location(id=1, zip_code="49002"), _location(id=5, zip_code="10001", county_zone="NYC061")]
+    test_feature = _feature(
+        "test-zip-10001",
+        event="TEST: Tornado Warning",
+        targets={"zip_codes": ["10001"]},
+    )
+
+    summary = _service(FakeProvider(), FakeTestAlertLoader([test_feature])).get_saved_summary(locations)
+
+    assert summary.total == 1
+    assert summary.alert_refs[0].source == "test"
+    assert [ref.id for ref in summary.alert_refs[0].affected_locations] == [5]
+    assert summary.alert_refs[0].affected_locations[0].match_type == "zip_code"
+
+
+def test_saved_summary_location_id_target_matches_only_that_saved_location() -> None:
+    locations = [_location(id=1, zip_code="49002"), _location(id=4, zip_code="49005")]
+    test_feature = _feature(
+        "test-location-id",
+        event="TEST: Tornado Warning",
+        targets={"location_ids": [4]},
+    )
+
+    summary = _service(FakeProvider(), FakeTestAlertLoader([test_feature])).get_saved_summary(locations)
+
+    assert summary.total == 1
+    assert [ref.id for ref in summary.alert_refs[0].affected_locations] == [4]
+    assert summary.alert_refs[0].affected_locations[0].match_type == "location_id"
+
+
+def test_saved_summary_county_fips_target_matches_locations_in_county() -> None:
+    locations = [
+        _location(id=1, county_fips="26077"),
+        _location(id=2, county_fips="26077", zip_code="49007"),
+        _location(id=3, county_fips="26025", county_zone="MIC025", zip_code="49015"),
+    ]
+    test_feature = _feature("test-county-fips", targets={"county_fips": ["26077"]})
+
+    summary = _service(FakeProvider(), FakeTestAlertLoader([test_feature])).get_saved_summary(locations)
+
+    assert summary.total == 1
+    assert [ref.id for ref in summary.alert_refs[0].affected_locations] == [1, 2]
+    assert {ref.match_type for ref in summary.alert_refs[0].affected_locations} == {"county_fips"}
+
+
+def test_saved_summary_zone_targets_match_saved_location_zones() -> None:
+    locations = [
+        _location(id=1, county_zone="MIC077", forecast_zone="MIZ072"),
+        _location(id=2, county_zone="MIC025", forecast_zone="MIZ078", zip_code="49015"),
+    ]
+    county_feature = _feature("test-county-zone", targets={"county_zones": ["MIC077"]})
+    forecast_feature = _feature("test-forecast-zone", targets={"forecast_zones": ["MIZ078"]})
+
+    summary = _service(
+        FakeProvider(),
+        FakeTestAlertLoader([county_feature, forecast_feature]),
+    ).get_saved_summary(locations)
+
+    refs_by_id = {ref.id: ref for ref in summary.alert_refs}
+    assert [ref.id for ref in refs_by_id["test-county-zone"].affected_locations] == [1]
+    assert refs_by_id["test-county-zone"].affected_locations[0].match_type == "county_zone"
+    assert [ref.id for ref in refs_by_id["test-forecast-zone"].affected_locations] == [2]
+    assert refs_by_id["test-forecast-zone"].affected_locations[0].match_type == "forecast_zone"
+
+
+def test_saved_summary_same_and_ugc_targets_match_saved_locations() -> None:
+    locations = [
+        _location(id=1, county_fips="26077", county_zone="MIC077", forecast_zone="MIZ072"),
+        _location(id=2, county_fips="26025", county_zone="MIC025", forecast_zone="MIZ078", zip_code="49015"),
+    ]
+    same_feature = _feature("test-same", targets={"same": ["026077"]})
+    ugc_feature = _feature("test-ugc", targets={"ugc": ["MIZ078"]})
+
+    summary = _service(
+        FakeProvider(),
+        FakeTestAlertLoader([same_feature, ugc_feature]),
+    ).get_saved_summary(locations)
+
+    refs_by_id = {ref.id: ref for ref in summary.alert_refs}
+    assert [ref.id for ref in refs_by_id["test-same"].affected_locations] == [1]
+    assert refs_by_id["test-same"].affected_locations[0].match_type == "same"
+    assert [ref.id for ref in refs_by_id["test-ugc"].affected_locations] == [2]
+    assert refs_by_id["test-ugc"].affected_locations[0].match_type == "ugc"
+
+
 def test_saved_summary_blank_test_alert_does_not_match_every_saved_location() -> None:
     locations = [_location(id=1, zip_code="49002"), _location(id=2, zip_code="49015", county_zone="MIC025")]
     blank_test_feature = _feature("blank-test-warning", event="TEST: Tornado Warning")
@@ -193,6 +281,22 @@ def test_saved_summary_blank_test_alert_does_not_match_every_saved_location() ->
 
     assert summary.total == 0
     assert summary.affected_location_count == 0
+
+
+def test_saved_summary_no_target_test_zone_alert_still_matches_saved_zone() -> None:
+    location = _location(county_zone="MIC077", forecast_zone="MIZ072")
+    zone_feature = _feature(
+        "test-zone-no-target",
+        event="TEST: Winter Storm Warning",
+        affected_zones=["https://api.weather.gov/zones/forecast/MIZ072"],
+        geocode={"UGC": ["MIZ072"]},
+    )
+
+    summary = _service(FakeProvider(), FakeTestAlertLoader([zone_feature])).get_saved_summary([location])
+
+    assert summary.total == 1
+    assert summary.alert_refs[0].id == "test-zone-no-target"
+    assert summary.alert_refs[0].affected_locations[0].match_type == "zone"
 
 
 def test_saved_summary_returns_partial_with_test_alerts_when_nws_zone_fails() -> None:

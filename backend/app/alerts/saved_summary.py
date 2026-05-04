@@ -12,6 +12,7 @@ from app.alerts.normalize import normalize_nws_feature_collection
 from app.alerts.scoring import score_alert, sort_alerts_by_priority
 from app.alerts.summary import build_alert_summary
 from app.alerts.test_alert_loader import TestAlertLoader
+from app.alerts.test_targets import has_explicit_test_targets, match_test_targets_to_location
 from app.logging_config import get_logger
 from app.models.location import Location
 from app.schemas.alert import AlertSummaryResponse, WeatherAlert
@@ -225,6 +226,9 @@ def match_saved_alert_to_location(
             matched_value=f"{location.latitude},{location.longitude}",
             confidence="high",
         )
+
+    if source == "test" and has_explicit_test_targets(normalized_alert.raw_properties):
+        return match_test_targets_to_location(normalized_alert.raw_properties.get("targets"), location)
 
     location_zone_ids = _location_zone_ids(location)
     alert_zone_ids = {zone_id for zone_id in _alert_zone_ids(normalized_alert) if zone_id}

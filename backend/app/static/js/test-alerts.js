@@ -334,6 +334,112 @@
     return Object.keys(geocode).length ? geocode : null;
   }
 
+  function normalizeTargets(rawTargets, alertId) {
+    if (rawTargets === null || rawTargets === undefined) {
+      return null;
+    }
+    if (typeof rawTargets !== "object" || Array.isArray(rawTargets)) {
+      throw new Error(`Alert ${alertId || ""} targets must be an object or empty.`.trim());
+    }
+    const targets = {};
+    const addStrings = function (key, validator, message) {
+      const values = Array.isArray(rawTargets[key]) ? rawTargets[key] : rawTargets[key] === undefined ? [] : [rawTargets[key]];
+      const normalizedValues = [];
+      values.forEach(function (item) {
+        const normalized = validator(item);
+        if (!normalized) {
+          throw new Error(`Alert ${alertId || ""} ${message}`.trim());
+        }
+        if (!normalizedValues.includes(normalized)) {
+          normalizedValues.push(normalized);
+        }
+      });
+      if (normalizedValues.length) {
+        targets[key] = normalizedValues;
+      }
+    };
+
+    addStrings("zip_codes", normalizeZipCode, "targets.zip_codes values must be 5-digit ZIP codes.");
+    addStrings("county_fips", normalizeCountyFips, "targets.county_fips values must be 5-digit FIPS codes.");
+    addStrings("county_zones", normalizeZoneId, "targets.county_zones values must be NWS zone IDs.");
+    addStrings("forecast_zones", normalizeZoneId, "targets.forecast_zones values must be NWS zone IDs.");
+    addStrings("same", normalizeSameCode, "targets.same values must be 6-digit SAME codes.");
+    addStrings("ugc", normalizeZoneId, "targets.ugc values must be NWS UGC IDs.");
+
+    const rawLocationIds = Array.isArray(rawTargets.location_ids)
+      ? rawTargets.location_ids
+      : rawTargets.location_ids === undefined
+        ? []
+        : [rawTargets.location_ids];
+    const locationIds = [];
+    rawLocationIds.forEach(function (item) {
+      const locationId = Number(item);
+      if (!Number.isInteger(locationId) || locationId < 1) {
+        throw new Error(`Alert ${alertId || ""} targets.location_ids values must be positive integers.`.trim());
+      }
+      if (!locationIds.includes(locationId)) {
+        locationIds.push(locationId);
+      }
+    });
+    if (locationIds.length) {
+      targets.location_ids = locationIds;
+    }
+
+    return Object.keys(targets).length ? targets : null;
+  }
+
+  function readTargetsFields() {
+    return normalizeTargets({
+      zip_codes: splitListInput(byId("field-target-zip-codes").value),
+      location_ids: splitListInput(byId("field-target-location-ids").value),
+      county_fips: splitListInput(byId("field-target-county-fips").value),
+      county_zones: splitListInput(byId("field-target-county-zones").value),
+      forecast_zones: splitListInput(byId("field-target-forecast-zones").value),
+      same: splitListInput(byId("field-target-same").value),
+      ugc: splitListInput(byId("field-target-ugc").value),
+    }, byId("field-id")?.value.trim() || "selected alert");
+  }
+
+  function setTargetsFriendlyFields(targets) {
+    const normalized = normalizeTargets(targets || null, "selected alert") || {};
+    byId("field-target-zip-codes").value = Array.isArray(normalized.zip_codes) ? normalized.zip_codes.join(", ") : "";
+    byId("field-target-location-ids").value = Array.isArray(normalized.location_ids) ? normalized.location_ids.join(", ") : "";
+    byId("field-target-county-fips").value = Array.isArray(normalized.county_fips) ? normalized.county_fips.join(", ") : "";
+    byId("field-target-county-zones").value = Array.isArray(normalized.county_zones) ? normalized.county_zones.join(", ") : "";
+    byId("field-target-forecast-zones").value = Array.isArray(normalized.forecast_zones) ? normalized.forecast_zones.join(", ") : "";
+    byId("field-target-same").value = Array.isArray(normalized.same) ? normalized.same.join(", ") : "";
+    byId("field-target-ugc").value = Array.isArray(normalized.ugc) ? normalized.ugc.join(", ") : "";
+  }
+
+  function normalizeZipCode(value) {
+    const text = String(value || "").trim();
+    if (/^\d{5}(-\d{4})?$/.test(text)) {
+      return text.slice(0, 5);
+    }
+    return "";
+  }
+
+  function normalizeCountyFips(value) {
+    let text = String(value || "").trim();
+    if (/^\d{1,5}$/.test(text)) {
+      text = text.padStart(5, "0");
+    }
+    return /^\d{5}$/.test(text) ? text : "";
+  }
+
+  function normalizeZoneId(value) {
+    const text = String(value || "").trim().split("/").filter(Boolean).pop()?.toUpperCase() || "";
+    return /^[A-Z]{2}[CZ]\d{3}$/.test(text) ? text : "";
+  }
+
+  function normalizeSameCode(value) {
+    let text = String(value || "").trim();
+    if (/^\d{1,6}$/.test(text)) {
+      text = text.padStart(6, "0");
+    }
+    return /^\d{6}$/.test(text) ? text : "";
+  }
+
   function validateGeocode(geocode) {
     if (geocode === null || geocode === undefined) {
       return;
@@ -391,7 +497,7 @@
       if (!alert || typeof alert !== "object" || Array.isArray(alert)) {
         throw new Error(`Alert at index ${index} must be an object.`);
       }
-      alert.source = alert.source || "test";
+      alert.source = "test";
       if (!alert.id || typeof alert.id !== "string" || !alert.id.trim()) {
         throw new Error("Missing required field: id");
       }
@@ -421,6 +527,12 @@
       validateGeometry(alert.geometry ?? null);
       validateAffectedZones(alert.affectedZones || []);
       validateGeocode(alert.geocode);
+      const normalizedTargets = normalizeTargets(alert.targets, alert.id);
+      if (normalizedTargets) {
+        alert.targets = normalizedTargets;
+      } else {
+        delete alert.targets;
+      }
       if (alert.parameters !== null && alert.parameters !== undefined && (typeof alert.parameters !== "object" || Array.isArray(alert.parameters))) {
         throw new Error(`Alert ${alert.id} parameters must be an object or empty.`);
       }
@@ -555,13 +667,13 @@
     alert.enabled = true;
     alert.effective = formatUtc(new Date(now - 60 * 60 * 1000));
     alert.expires = formatUtc(new Date(now + 2 * 60 * 60 * 1000));
-    alert.source = alert.source || "test";
+    alert.source = "test";
   }
 
   function expireAlert(alert) {
     alert.enabled = false;
     alert.expires = formatUtc(new Date(Date.now() - 60 * 1000));
-    alert.source = alert.source || "test";
+    alert.source = "test";
   }
 
   function selectedAlertId() {
@@ -619,10 +731,13 @@
     ["id", "source", "severity", "urgency", "certainty", "headline", "description", "instruction", "areaDesc", "effective", "expires"].forEach(function (field) {
       byId(`field-${field}`).value = "";
     });
+    byId("field-source").value = "test";
+    byId("field-source").readOnly = true;
     byId("field-geometry").value = "";
     byId("field-affectedZones").value = "";
     byId("field-geocode-ugc").value = "";
     byId("field-geocode-same").value = "";
+    setTargetsFriendlyFields(null);
     byId("field-parameters").value = "{}";
     renderParameterFields({});
     geometryDrawPoints = [];
@@ -1290,7 +1405,7 @@
       if (alertGeometryMode === "zone" && (!options || options.updateStatus !== false)) {
         setGeometryStatus("Zone mode selected. The saved alert uses affectedZones and geometry stays null.");
       } else if (!options || options.updateStatus !== false) {
-        setGeometryStatus("None mode selected. The saved alert has no geometry and no affectedZones.");
+        setGeometryStatus("No geometry selected. Target fields determine where the test alert applies.");
       }
       return;
     }
@@ -1505,7 +1620,7 @@
   }
 
   function renderSelectedAlertForm(alert) {
-    alert.source = alert.source || "test";
+    alert.source = "test";
     editorState = {
       originalAlertId: alert.id || null,
       isNewAlert: false,
@@ -1516,11 +1631,14 @@
     ["id", "source", "severity", "urgency", "certainty", "headline", "description", "instruction", "areaDesc", "effective", "expires"].forEach(function (field) {
       byId(`field-${field}`).value = alert[field] || "";
     });
+    byId("field-source").value = "test";
+    byId("field-source").readOnly = true;
     byId("field-id").readOnly = Boolean(editorState.originalAlertId);
     byId("field-geometry").value = prettyJson(alert.geometry);
     byId("field-affectedZones").value = Array.isArray(alert.affectedZones) ? alert.affectedZones.join("\n") : "";
     byId("field-geocode-ugc").value = Array.isArray(alert.geocode?.UGC) ? alert.geocode.UGC.join(", ") : "";
     byId("field-geocode-same").value = Array.isArray(alert.geocode?.SAME) ? alert.geocode.SAME.join(", ") : "";
+    setTargetsFriendlyFields(alert.targets || null);
     byId("field-parameters").value = prettyJson(alert.parameters || {});
     renderParameterFields(alert.parameters || {});
     geometryDrawPoints = [];
@@ -1556,6 +1674,7 @@
       throw new Error("Zone mode requires at least one affected NWS zone URL.");
     }
     const geocode = mode === "zone" ? readGeocodeFields() : null;
+    const targets = readTargetsFields();
     const parameters = syncFriendlyParametersToRaw();
     const effective = validateUtc(byId("field-effective").value.trim(), "Effective");
     const expires = validateUtc(byId("field-expires").value.trim(), "Expires");
@@ -1581,7 +1700,7 @@
     const updated = {
       enabled: byId("field-enabled").checked,
       id,
-      source: byId("field-source").value.trim() || "test",
+      source: "test",
       event,
       severity: byId("field-severity").value,
       urgency: byId("field-urgency").value,
@@ -1597,6 +1716,9 @@
       geocode,
       parameters,
     };
+    if (targets) {
+      updated.targets = targets;
+    }
     if (hasRelativeTime) {
       updated.relative_time = cloneValue(existingAlert.relative_time);
     }
@@ -1667,7 +1789,7 @@
     ensurePayloadReady();
     payload.alerts.forEach(function (alert) {
       if (alert && typeof alert === "object") {
-        alert.source = alert.source || "test";
+        alert.source = "test";
         alert.enabled = alert.enabled === true;
       }
     });
@@ -1794,7 +1916,7 @@
   async function disableAll() {
     currentAlerts().forEach(function (alert) {
       alert.enabled = false;
-      alert.source = alert.source || "test";
+      alert.source = "test";
     });
     if (selectedIndex >= 0) {
       byId("field-enabled").checked = false;
