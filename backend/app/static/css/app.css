@@ -455,6 +455,20 @@ table {
   justify-content: flex-end;
 }
 
+.location-editor__saved-edit {
+  display: grid;
+  gap: 0.45rem;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1fr) auto;
+}
+
+.location-editor__saved-edit-actions {
+  align-items: end;
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
 .location-editor label {
   display: grid;
   font-size: 0.82rem;
@@ -763,6 +777,15 @@ table {
   .location-editor__saved-actions,
   .location-editor__saved-row-actions {
     justify-content: stretch;
+  }
+
+  .location-editor__saved-edit {
+    grid-template-columns: 1fr;
+  }
+
+  .location-editor__saved-edit-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .location-editor__nws-preview-grid {

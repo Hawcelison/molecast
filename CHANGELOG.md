@@ -2,6 +2,18 @@
 
 Molecast release notes will be tracked here.
 
+## 0.6.2 - 2026-05-03
+
+- Added saved-location rename/edit polish to the existing saved-location panel.
+- Added compact inline Edit controls for saved locations.
+- Supported editing saved-location label and name through `PUT /api/locations/{id}`.
+- Prevented blank saved-location labels in the UI.
+- Refreshed the saved-location list after a successful rename.
+- Updated active saved-location rename handling so `MOLECAST_CONFIG.activeLocation` and the visible active display update without recentering the map or refreshing alerts.
+- Preserved inactive rename behavior without activating the row.
+- Kept active Delete hidden and preserved Save to saved locations, Activate, Delete, ZIP lookup, city/address search, map-pick preview, explicit Save, and test-alert hygiene.
+- Made no backend API changes in this release.
+
 ## 0.6.1 - 2026-05-03
 
 - Added the frontend saved-location panel inside the existing active location editor.

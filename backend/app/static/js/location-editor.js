@@ -9,6 +9,7 @@
     savedLocations: [],
     isLoadingSavedLocations: false,
     savedLocationActionId: null,
+    editingSavedLocationId: null,
     draftSourceMethod: null,
     searchTimer: null,
     searchSlowTimer: null,
@@ -458,6 +459,82 @@
     }
   }
 
+  function inputIdForSavedLocation(location, fieldName) {
+    return `saved-location-${fieldName}-${location.id}`;
+  }
+
+  function renderSavedLocationEdit(location, row) {
+    const edit = document.createElement("div");
+    edit.className = "location-editor__saved-edit";
+
+    const labelField = document.createElement("label");
+    labelField.setAttribute("for", inputIdForSavedLocation(location, "label"));
+    labelField.textContent = "Label";
+
+    const labelInput = document.createElement("input");
+    labelInput.id = inputIdForSavedLocation(location, "label");
+    labelInput.type = "text";
+    labelInput.maxLength = 120;
+    labelInput.autocomplete = "off";
+    labelInput.value = location.label || location.name || "";
+    labelInput.required = true;
+    labelField.append(labelInput);
+
+    const nameField = document.createElement("label");
+    nameField.setAttribute("for", inputIdForSavedLocation(location, "name"));
+    nameField.textContent = "Name";
+
+    const nameInput = document.createElement("input");
+    nameInput.id = inputIdForSavedLocation(location, "name");
+    nameInput.type = "text";
+    nameInput.maxLength = 120;
+    nameInput.autocomplete = "off";
+    nameInput.value = location.name || location.label || "";
+    nameField.append(nameInput);
+
+    const actions = document.createElement("div");
+    actions.className = "location-editor__saved-edit-actions";
+
+    const saveButton = document.createElement("button");
+    saveButton.className = "location-panel__button location-panel__button--primary";
+    saveButton.type = "button";
+    saveButton.textContent = "Save";
+    saveButton.addEventListener("click", function () {
+      updateSavedLocation(location, labelInput.value, nameInput.value);
+    });
+
+    const cancelButton = document.createElement("button");
+    cancelButton.className = "location-panel__button";
+    cancelButton.type = "button";
+    cancelButton.textContent = "Cancel";
+    cancelButton.addEventListener("click", function () {
+      state.editingSavedLocationId = null;
+      renderSavedLocations();
+      setSavedStatus(`${state.savedLocations.length} saved location${state.savedLocations.length === 1 ? "" : "s"}.`, "");
+    });
+
+    [labelInput, nameInput].forEach(function (input) {
+      input.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          updateSavedLocation(location, labelInput.value, nameInput.value);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          state.editingSavedLocationId = null;
+          renderSavedLocations();
+        }
+      });
+    });
+
+    actions.append(saveButton, cancelButton);
+    edit.append(labelField, nameField, actions);
+    row.append(edit);
+    window.setTimeout(function () {
+      labelInput.focus();
+      labelInput.select();
+    }, 0);
+  }
+
   function renderSavedLocations() {
     const list = getElement("location-saved-list");
     if (!list) {
@@ -492,6 +569,7 @@
       titleLine.append(name);
 
       const isActive = isSavedLocationActive(location);
+      const isEditing = Number(state.editingSavedLocationId) === Number(location.id);
       if (isActive) {
         const badge = document.createElement("span");
         badge.className = "location-editor__saved-badge";
@@ -516,6 +594,25 @@
       const actions = document.createElement("div");
       actions.className = "location-editor__saved-row-actions";
 
+      if (isEditing) {
+        row.append(main);
+        renderSavedLocationEdit(location, row);
+        list.append(row);
+        return;
+      }
+
+      const editButton = document.createElement("button");
+      editButton.className = "location-panel__button";
+      editButton.type = "button";
+      editButton.dataset.action = "edit";
+      editButton.textContent = "Edit";
+      editButton.disabled = state.savedLocationActionId === location.id;
+      editButton.addEventListener("click", function () {
+        state.editingSavedLocationId = location.id;
+        renderSavedLocations();
+        setSavedStatus(`Editing ${formatLocation(location)}.`, "pending");
+      });
+
       if (!isActive) {
         const activateButton = document.createElement("button");
         activateButton.className = "location-panel__button location-panel__button--primary";
@@ -537,7 +634,9 @@
           deleteSavedLocation(location);
         });
 
-        actions.append(activateButton, deleteButton);
+        actions.append(activateButton, editButton, deleteButton);
+      } else {
+        actions.append(editButton);
       }
 
       row.append(main, actions);
@@ -1325,6 +1424,79 @@
         ? "Active location cannot be deleted. Activate another saved location first."
         : error.message || "Saved location could not be deleted.";
       finalStatus = { text: message, type: "error" };
+    } finally {
+      state.savedLocationActionId = null;
+      renderSavedLocations();
+      if (finalStatus) {
+        setSavedStatus(finalStatus.text, finalStatus.type);
+      }
+    }
+  }
+
+  function updateActiveIdentityField(fieldName, previousLocation, updatedLocation) {
+    const field = getField(fieldName);
+    if (!field) {
+      return;
+    }
+    const currentValue = field.value.trim();
+    const previousValue = previousLocation?.[fieldName] ? String(previousLocation[fieldName]) : "";
+    if (!currentValue || currentValue === previousValue) {
+      field.value = updatedLocation?.[fieldName] || "";
+    }
+  }
+
+  function applyActiveLocationRename(updatedLocation, previousLocation) {
+    if (!updatedLocation || !isSavedLocationActive(updatedLocation)) {
+      return false;
+    }
+    const nextActiveLocation = Object.assign({}, state.activeLocation || {}, updatedLocation);
+    state.activeLocation = nextActiveLocation;
+    state.status = {
+      active_location: nextActiveLocation,
+      nws_metadata_status: nextActiveLocation.nws_points_updated_at ? "current" : "missing",
+    };
+    updateConfig(nextActiveLocation);
+    updateDisplay();
+    updateActiveIdentityField("label", previousLocation, nextActiveLocation);
+    updateActiveIdentityField("name", previousLocation, nextActiveLocation);
+    renderSavedLocations();
+    return true;
+  }
+
+  async function updateSavedLocation(location, labelValue, nameValue) {
+    if (state.savedLocationActionId) {
+      return;
+    }
+    const label = String(labelValue || "").trim();
+    const name = String(nameValue || "").trim() || label;
+    if (!label) {
+      setSavedStatus("Saved location label is required.", "error");
+      getElement(inputIdForSavedLocation(location, "label"))?.focus();
+      return;
+    }
+
+    let finalStatus = null;
+    state.savedLocationActionId = location.id;
+    setSavedStatus("Saving saved location changes...", "pending");
+    renderSavedLocations();
+
+    try {
+      const updatedLocation = await fetchJson(`/api/locations/${encodeURIComponent(location.id)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          label: label,
+          name: name,
+        }),
+      });
+      state.editingSavedLocationId = null;
+      await loadSavedLocations({ silent: true });
+      applyActiveLocationRename(updatedLocation, location);
+      finalStatus = { text: `Renamed ${formatLocation(updatedLocation)}.`, type: "success" };
+    } catch (error) {
+      finalStatus = { text: error.message || "Saved location could not be renamed.", type: "error" };
     } finally {
       state.savedLocationActionId = null;
       renderSavedLocations();
