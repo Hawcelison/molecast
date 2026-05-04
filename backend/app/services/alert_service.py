@@ -60,6 +60,12 @@ class NwsAlertProvider:
 
         return {"type": "FeatureCollection", "features": self._dedupe_features(payloads)}
 
+    def fetch_zone_alerts(self, zone_id: str) -> dict[str, Any]:
+        return self._fetch_zone_alerts(zone_id)
+
+    def fetch_point_alerts(self, location: Location) -> dict[str, Any]:
+        return self._fetch_point_alerts(location)
+
     def get_points_metadata(self, location: Location) -> dict[str, Any] | None:
         location_key = self._get_location_key(location)
         if self._cached_points_location_key == location_key:

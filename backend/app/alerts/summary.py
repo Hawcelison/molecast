@@ -1,7 +1,12 @@
 from datetime import datetime
 from typing import Any
 
-from app.schemas.alert import AlertSummaryHighestAlert, AlertSummaryResponse, WeatherAlert
+from app.schemas.alert import (
+    AlertSummaryAlertRef,
+    AlertSummaryHighestAlert,
+    AlertSummaryResponse,
+    WeatherAlert,
+)
 
 
 SEVERITY_RANKS = {
@@ -24,6 +29,7 @@ def build_alert_summary(
     affected_location_count: int | None = None,
     partial: bool = False,
     errors: list[str] | None = None,
+    alert_refs: list[AlertSummaryAlertRef | dict[str, Any]] | None = None,
 ) -> AlertSummaryResponse:
     warning_count = 0
     watch_count = 0
@@ -41,7 +47,18 @@ def build_alert_summary(
         else:
             other_count += 1
 
+    summary_alert_refs = (
+        [
+            ref if isinstance(ref, AlertSummaryAlertRef) else AlertSummaryAlertRef.model_validate(ref)
+            for ref in alert_refs
+        ]
+        if alert_refs is not None
+        else None
+    )
     highest_alert = choose_highest_alert(alerts)
+    affected_counts_by_alert = {
+        (ref.source, ref.id): ref.affected_location_count for ref in (summary_alert_refs or [])
+    }
 
     return AlertSummaryResponse(
         scope=scope,
@@ -51,13 +68,19 @@ def build_alert_summary(
         watch_count=watch_count,
         advisory_count=advisory_count,
         other_count=other_count,
-        highest_alert=build_highest_alert_ref(highest_alert) if highest_alert else None,
+        highest_alert=build_highest_alert_ref(
+            highest_alert,
+            affected_location_count=affected_counts_by_alert.get((highest_alert.source, highest_alert.id)),
+        )
+        if highest_alert
+        else None,
         updated_at=updated_at,
         refresh_interval_seconds=refresh_interval_seconds,
         saved_location_count=saved_location_count,
         affected_location_count=affected_location_count,
         partial=partial,
         errors=errors or [],
+        alert_refs=summary_alert_refs,
     )
 
 
@@ -87,7 +110,10 @@ def highest_alert_sort_key(alert: WeatherAlert) -> tuple[int, int, int, int]:
     )
 
 
-def build_highest_alert_ref(alert: WeatherAlert) -> AlertSummaryHighestAlert:
+def build_highest_alert_ref(
+    alert: WeatherAlert,
+    affected_location_count: int | None = None,
+) -> AlertSummaryHighestAlert:
     return AlertSummaryHighestAlert(
         id=alert.id,
         source=alert.source,
@@ -95,6 +121,7 @@ def build_highest_alert_ref(alert: WeatherAlert) -> AlertSummaryHighestAlert:
         priority=alert.priority,
         priority_score=alert.priority_score,
         color_hex=alert.color_hex,
+        affected_location_count=affected_location_count,
     )
 
 

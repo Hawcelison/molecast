@@ -14,7 +14,12 @@ class TestAlertLoader:
         self.settings = app_settings
         self.logger = get_logger()
 
-    def load_enabled_alert_features(self, location: Location) -> list[dict[str, Any]]:
+    def load_enabled_alert_features(
+        self,
+        location: Location,
+        *,
+        include_location_area_fallback: bool = True,
+    ) -> list[dict[str, Any]]:
         alert_file = self._resolve_alert_file()
         if alert_file is None:
             self.logger.warning(
@@ -66,7 +71,11 @@ class TestAlertLoader:
                 )
                 continue
 
-            feature = self._build_feature(raw_alert, location)
+            feature = self._build_feature(
+                raw_alert,
+                location,
+                include_location_area_fallback=include_location_area_fallback,
+            )
             if feature is not None:
                 features.append(feature)
 
@@ -105,6 +114,8 @@ class TestAlertLoader:
         self,
         raw_alert: dict[str, Any],
         location: Location,
+        *,
+        include_location_area_fallback: bool = True,
     ) -> dict[str, Any] | None:
         alert_id = raw_alert.get("id")
         event = raw_alert.get("event")
@@ -112,7 +123,10 @@ class TestAlertLoader:
             self.logger.warning("Skipping enabled test alert missing id or event.")
             return None
 
-        area_desc = raw_alert.get("areaDesc") or location.county or location.state
+        if include_location_area_fallback:
+            area_desc = raw_alert.get("areaDesc") or location.county or location.state
+        else:
+            area_desc = raw_alert.get("areaDesc")
         effective, expires = resolve_relative_time_fields(raw_alert, now_utc())
         properties = {
             "id": alert_id,

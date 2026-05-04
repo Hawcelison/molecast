@@ -2,6 +2,17 @@
 
 Molecast release notes will be tracked here.
 
+## 0.7.1 - 2026-05-04
+
+- Implemented backend saved-location alert summary aggregation at `GET /api/alerts/summary?scope=saved`.
+- Loaded saved locations, fetched NWS alerts by unique saved-location zones, normalized alerts once, matched alerts against saved locations, deduped globally, and merged affected-location refs.
+- Added saved summary metadata for `saved_location_count`, `affected_location_count`, `partial`, `errors`, `highest_alert.affected_location_count`, and `alert_refs`.
+- Preserved NWS/test source identity so test alerts do not dedupe with NWS alerts.
+- Prevented blank or untargeted test alerts from matching every saved location in saved aggregation.
+- Added saved-summary matching support for geometry, affected zones, normalized UGC/SAME geocodes, county FIPS, and test `zipCode`/ZIP-like parameters.
+- Preserved `/api/alerts/active` and `/api/alerts/summary?scope=active` as active-location only.
+- Left frontend scope selector work and formal test-alert targeting for the next phase.
+
 ## 0.7.0 - 2026-05-04
 
 - Added the backend active-scope alert summary foundation at `GET /api/alerts/summary?scope=active`.

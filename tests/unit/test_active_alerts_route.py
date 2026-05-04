@@ -1,8 +1,5 @@
 from datetime import UTC, datetime
 
-import pytest
-from fastapi import HTTPException
-
 from app.api.routes import alerts as alerts_route
 from app.alerts.presentation import build_alert_presentation
 from app.models.location import Location
@@ -117,6 +114,31 @@ class FakeSummaryActiveAlertService:
     def get_active_alerts(self, location: Location):
         self.calls.append(location.id)
         return self.alerts, datetime(2026, 5, 4, 12, 0, tzinfo=UTC)
+
+
+class FakeSavedSummaryService:
+    def __init__(self):
+        self.calls = []
+
+    def get_saved_summary(self, locations):
+        self.calls.append([location.id for location in locations])
+        return {
+            "scope": "saved",
+            "scope_label": "All Saved Locations",
+            "total": 0,
+            "warning_count": 0,
+            "watch_count": 0,
+            "advisory_count": 0,
+            "other_count": 0,
+            "highest_alert": None,
+            "updated_at": datetime(2026, 5, 4, 12, 0, tzinfo=UTC),
+            "refresh_interval_seconds": 60,
+            "saved_location_count": len(locations),
+            "affected_location_count": 0,
+            "partial": False,
+            "errors": [],
+            "alert_refs": [],
+        }
 
 
 def test_normalized_alerts_flow_through_active_alerts_endpoint(monkeypatch) -> None:
@@ -267,9 +289,15 @@ def test_empty_active_alert_summary_has_zero_counts(monkeypatch) -> None:
     assert response.highest_alert is None
 
 
-def test_saved_alert_summary_scope_is_not_implemented() -> None:
-    with pytest.raises(HTTPException) as exc_info:
-        alerts_route.get_alert_summary(scope="saved", db=None)
+def test_saved_alert_summary_scope_uses_saved_summary_service(monkeypatch) -> None:
+    location = _location()
+    fake_service = FakeSavedSummaryService()
+    monkeypatch.setattr(alerts_route.location_service, "list_locations", lambda db, settings: [location])
+    monkeypatch.setattr(alerts_route, "saved_alert_summary_service", fake_service)
 
-    assert exc_info.value.status_code == 501
-    assert "Only active alert summary scope is implemented" in exc_info.value.detail
+    response = AlertSummaryResponse.model_validate(alerts_route.get_alert_summary(scope="saved", db=None))
+
+    assert response.scope == "saved"
+    assert response.scope_label == "All Saved Locations"
+    assert response.saved_location_count == 1
+    assert fake_service.calls == [[location.id]]

@@ -99,6 +99,29 @@ class AlertSummaryHighestAlert(BaseModel):
     priority: int
     priority_score: int
     color_hex: str
+    affected_location_count: int | None = None
+
+
+class AlertSummaryAffectedLocationRef(BaseModel):
+    id: int
+    label: str | None = None
+    name: str | None = None
+    zip_code: str | None = None
+    city: str | None = None
+    state: str | None = None
+    county: str | None = None
+    match_type: str
+
+
+class AlertSummaryAlertRef(BaseModel):
+    id: str
+    source: str
+    event: str | None = None
+    priority: int
+    priority_score: int
+    color_hex: str
+    affected_location_count: int = 0
+    affected_locations: list[AlertSummaryAffectedLocationRef] = Field(default_factory=list)
 
 
 class AlertSummaryResponse(BaseModel):
@@ -116,6 +139,7 @@ class AlertSummaryResponse(BaseModel):
     affected_location_count: int | None = None
     partial: bool = False
     errors: list[str] = Field(default_factory=list)
+    alert_refs: list[AlertSummaryAlertRef] | None = None
 
     @field_validator("updated_at")
     @classmethod
