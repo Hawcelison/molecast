@@ -84,13 +84,15 @@
   async function loadAlerts() {
     const alertList = document.getElementById("alerts-list");
     const bannerContainer = document.getElementById("alert-banner-container");
-    if (!alertList && !bannerContainer) {
+    const summaryContainer = document.getElementById("alert-summary-counter");
+    if (!alertList && !bannerContainer && !summaryContainer) {
       return;
     }
 
     try {
       const result = await window.MolecastAlertsApi.fetchActiveAlerts();
       window.MolecastAlertBanners.render(bannerContainer, result.alerts);
+      window.MolecastAlertSummary?.refresh();
       document.dispatchEvent(new CustomEvent("molecast:alerts-updated", {
         detail: { alerts: result.alerts },
       }));
@@ -103,6 +105,7 @@
       document.dispatchEvent(new CustomEvent("molecast:alerts-updated", {
         detail: { alerts: [] },
       }));
+      window.MolecastAlertSummary?.refresh();
       window.MOLECAST_ALERT_MAP?.renderAlerts([]);
       resetAlertViews(alertList, bannerContainer);
     }
@@ -112,5 +115,8 @@
     refreshAlerts: loadAlerts,
   };
 
-  document.addEventListener("DOMContentLoaded", loadAlerts);
+  document.addEventListener("DOMContentLoaded", function () {
+    window.MolecastAlertSummary?.init();
+    loadAlerts();
+  });
 })();

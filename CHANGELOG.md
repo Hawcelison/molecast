@@ -2,6 +2,16 @@
 
 Molecast release notes will be tracked here.
 
+## 0.7.3 - 2026-05-04
+
+- Added the frontend scoped alert counter UI for alert summaries.
+- Added an alert counter scope selector for Active Location and All Saved Locations.
+- Loaded counter data from `GET /api/alerts/summary?scope=active` and `GET /api/alerts/summary?scope=saved` instead of deriving counts from the active alert array.
+- Clearly labeled the selected counter scope and persisted the preference through `MolecastSettingsStore` as `alertCounterScope`.
+- Displayed total alerts, warnings, watches, advisories, other alerts, highest alert, saved affected-location count, no-alert state, and partial-data warning.
+- Used `highest_alert.color_hex` where available and labeled test highest alerts as `TEST`.
+- Preserved active-location-only alert banners on `/api/alerts/active` with no alert ingestion or banner behavior changes.
+
 ## 0.7.2 - 2026-05-04
 
 - Added formal test-alert target metadata for nationwide saved-location alert testing.

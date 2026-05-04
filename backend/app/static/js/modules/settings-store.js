@@ -3,6 +3,7 @@
   const DEFAULT_SETTINGS = Object.freeze({
     alertAudioEnabled: false,
     testAudioEnabled: false,
+    alertCounterScope: "active",
     flashingDisabled: true,
     silencedAlertIds: [],
     acknowledgedAlertIds: [],
@@ -31,6 +32,7 @@
     return {
       alertAudioEnabled: Boolean(settings.alertAudioEnabled),
       testAudioEnabled: Boolean(settings.testAudioEnabled),
+      alertCounterScope: normalizeAlertCounterScope(settings.alertCounterScope),
       flashingDisabled: true,
       silencedAlertIds: normalizeIdArray(settings.silencedAlertIds),
       acknowledgedAlertIds: normalizeIdArray(settings.acknowledgedAlertIds),
@@ -44,6 +46,10 @@
         return typeof item === "string" && item.trim();
       }))]
       : [];
+  }
+
+  function normalizeAlertCounterScope(value) {
+    return value === "saved" ? "saved" : "active";
   }
 
   function saveSettings() {
@@ -74,6 +80,10 @@
 
   function setTestAudioEnabled(enabled) {
     return updateSettings({ testAudioEnabled: Boolean(enabled) });
+  }
+
+  function setAlertCounterScope(scope) {
+    return updateSettings({ alertCounterScope: normalizeAlertCounterScope(scope) });
   }
 
   function setFlashingDisabled(_disabled) {
@@ -170,6 +180,7 @@
     markAlertsRead,
     prefersReducedMotion,
     setAlertAudioEnabled,
+    setAlertCounterScope,
     setFlashingDisabled,
     setTestAudioEnabled,
     silenceAlert,

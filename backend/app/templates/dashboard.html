@@ -7,17 +7,19 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="/static/js/modules/settings-store.js?v=alert-ui-20260501b" defer></script>
-<script src="/static/js/modules/alerts-api.js?v=alert-ui-20260501b" defer></script>
+<script src="/static/js/modules/settings-store.js?v=alert-summary-scope-20260504" defer></script>
+<script src="/static/js/modules/alerts-api.js?v=alert-summary-scope-20260504" defer></script>
 <script src="/static/js/modules/alert-icons.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-audio.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-banners.js?v=alert-ui-20260501b" defer></script>
+<script src="/static/js/modules/alert-summary.js?v=alert-summary-scope-20260504" defer></script>
 <script src="/static/js/location-editor.js?v=saved-location-rename-edit-20260503" defer></script>
 {% endblock %}
 
 {% block content %}
 <main id="dashboard">
   <div id="alert-controls" class="alert-controls" aria-label="Alert controls"></div>
+  <section id="alert-summary-counter" class="alert-summary" aria-label="Alert counter" aria-live="polite"></section>
   <div id="alert-banner-container" class="alert-banner-container" role="list" aria-live="polite"></div>
   <h1>Molecast</h1>
   <section class="location-panel" aria-labelledby="active-location-display">
