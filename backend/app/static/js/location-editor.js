@@ -200,7 +200,44 @@
     }
   }
 
-  function setPanelOpen(isOpen) {
+  function focusEditorTarget(target) {
+    if (target === "saved") {
+      const savedSection = getElement("location-saved-title")?.closest(".location-editor__saved");
+      if (savedSection) {
+        savedSection.focus({ preventScroll: true });
+        return;
+      }
+    }
+    getSearchInput()?.focus({ preventScroll: true });
+  }
+
+  function highlightEditorTarget(target) {
+    const panel = getElement("location-editor-panel");
+    const savedSection = getElement("location-saved-title")?.closest(".location-editor__saved");
+    const element = target === "saved" && savedSection ? savedSection : panel;
+    if (!element) {
+      return;
+    }
+    element.classList.remove("location-editor--attention");
+    window.requestAnimationFrame(function () {
+      element.classList.add("location-editor--attention");
+      window.setTimeout(function () {
+        element.classList.remove("location-editor--attention");
+      }, 1200);
+    });
+  }
+
+  function scrollEditorTargetIntoView(target) {
+    const panel = getElement("location-editor-panel");
+    const savedSection = getElement("location-saved-title")?.closest(".location-editor__saved");
+    const element = target === "saved" && savedSection ? savedSection : panel;
+    element?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+
+  function setPanelOpen(isOpen, options) {
+    const focusTarget = options && Object.prototype.hasOwnProperty.call(options, "focusTarget")
+      ? options.focusTarget
+      : "search";
     state.isOpen = isOpen;
     const panel = getElement("location-editor-panel");
     const button = getElement("location-editor-toggle");
@@ -209,7 +246,7 @@
     }
     if (button) {
       button.setAttribute("aria-expanded", String(isOpen));
-      button.textContent = isOpen ? "Close editor" : "Edit location";
+      button.textContent = isOpen ? "Close Editor" : "Edit Location";
     }
     if (!isOpen) {
       stopMapPinPlacement({ preserveStatus: true });
@@ -219,8 +256,20 @@
       populateForm(state.activeLocation);
       setSearchStatus("Select a location, then review and save.", "");
       loadSavedLocations({ silent: state.savedLocations.length > 0 });
-      getSearchInput()?.focus();
+      if (focusTarget) {
+        focusEditorTarget(focusTarget);
+      }
     }
+  }
+
+  function openEditor(options) {
+    const target = options && options.target === "saved" ? "saved" : "search";
+    setPanelOpen(true, { focusTarget: target });
+    window.setTimeout(function () {
+      scrollEditorTargetIntoView(target);
+      focusEditorTarget(target);
+      highlightEditorTarget(target);
+    }, 0);
   }
 
   function populateForm(location) {
@@ -242,7 +291,7 @@
     const display = getElement("active-location-display");
     const statusLine = getElement("location-metadata-status");
     if (display) {
-      display.textContent = `Location: ${formatLocation(location)}`;
+      display.textContent = `Active Location: ${formatLocation(location)}`;
     }
     if (statusLine) {
       statusLine.textContent = metadataText(location, state.status);
@@ -1671,7 +1720,14 @@
 
   function bindEvents() {
     getElement("location-editor-toggle")?.addEventListener("click", function () {
-      setPanelOpen(!state.isOpen);
+      if (state.isOpen) {
+        setPanelOpen(false);
+      } else {
+        openEditor({ target: "search" });
+      }
+    });
+    getElement("location-saved-locations-open")?.addEventListener("click", function () {
+      openEditor({ target: "saved" });
     });
     getElement("location-editor-cancel")?.addEventListener("click", function () {
       setMessage("", "");
@@ -1761,6 +1817,7 @@
       placeActiveMarker(state.activeLocation);
     },
     refreshSavedLocations: loadSavedLocations,
+    open: openEditor,
   };
 
   document.addEventListener("DOMContentLoaded", initialize);

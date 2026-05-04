@@ -3,8 +3,10 @@
     active: "Active Location",
     saved: "All Saved Locations",
   };
+  const DETAILS_PANEL_ID = "alert-summary-details-panel";
 
   let currentScope = "active";
+  let detailsOpen = false;
   let lastSummary = null;
   let initialized = false;
 
@@ -48,6 +50,9 @@
     if (!root) {
       return;
     }
+    if (currentScope !== "saved") {
+      detailsOpen = false;
+    }
     root.replaceChildren(
       renderHeader(),
       createElement("div", "alert-summary__body", "Loading alert counter")
@@ -67,6 +72,7 @@
   function renderHeader() {
     const header = createElement("div", "alert-summary__header");
     const label = createElement("strong", "alert-summary__scope-label", `Counter: ${SCOPES[currentScope]}`);
+    const controls = createElement("div", "alert-summary__controls");
     const selector = createElement("div", "alert-summary__scope-selector");
     selector.setAttribute("aria-label", "Alert counter scope");
 
@@ -87,15 +93,41 @@
       selector.append(button);
     });
 
-    header.append(label, selector);
+    controls.append(selector);
+    if (currentScope === "saved") {
+      controls.append(renderDetailsToggle());
+    }
+
+    header.append(label, controls);
     return header;
   }
 
   async function setScope(scope) {
     currentScope = scope === "saved" ? "saved" : "active";
+    if (currentScope !== "saved") {
+      detailsOpen = false;
+    }
     setStoredScope(currentScope);
     renderLoading();
     await refresh();
+  }
+
+  function renderDetailsToggle() {
+    const button = createElement(
+      "button",
+      "alert-summary__details-toggle",
+      detailsOpen ? "Hide saved alert details" : "View saved alert details"
+    );
+    button.type = "button";
+    button.setAttribute("aria-expanded", String(detailsOpen));
+    button.setAttribute("aria-controls", DETAILS_PANEL_ID);
+    button.addEventListener("click", function () {
+      detailsOpen = !detailsOpen;
+      if (lastSummary) {
+        renderSummary(lastSummary);
+      }
+    });
+    return button;
   }
 
   async function refresh() {
@@ -144,7 +176,11 @@
       body.append(createElement("span", "alert-summary__partial", "Partial data"));
     }
 
-    root.replaceChildren(renderHeader(), body);
+    const children = [renderHeader(), body];
+    if (currentScope === "saved" && detailsOpen) {
+      children.push(renderDetailsPanel(summary));
+    }
+    root.replaceChildren(...children);
   }
 
   function metricChip(label, value) {
@@ -167,6 +203,166 @@
       createElement("strong", "alert-summary__chip-value", `${source}${alert.event || alert.id || "Alert"}`)
     );
     return chip;
+  }
+
+  function renderDetailsPanel(summary) {
+    const panel = createElement("section", "alert-summary__details");
+    panel.id = DETAILS_PANEL_ID;
+    panel.setAttribute("aria-label", "Saved alert details");
+
+    panel.append(
+      createElement(
+        "p",
+        "alert-summary__details-intro",
+        "All Saved Locations counts alerts matched against saved locations. Active-location banners remain separate."
+      )
+    );
+
+    if (summary?.partial) {
+      panel.append(renderPartialDetails(summary));
+    }
+
+    const total = Number(summary?.total) || 0;
+    const refs = Array.isArray(summary?.alert_refs) ? summary.alert_refs : null;
+    if (total === 0) {
+      panel.append(createElement("p", "alert-summary__details-empty", "No saved-location alerts are included in this counter."));
+      return panel;
+    }
+    if (!refs || refs.length === 0) {
+      panel.append(createElement("p", "alert-summary__details-empty", "Saved alert details are unavailable for this summary."));
+      return panel;
+    }
+
+    const list = createElement("div", "alert-summary__details-list");
+    refs.forEach(function (alertRef) {
+      list.append(renderAlertRef(alertRef));
+    });
+    panel.append(list);
+    return panel;
+  }
+
+  function renderPartialDetails(summary) {
+    const warning = createElement("div", "alert-summary__details-warning");
+    warning.append(createElement("strong", "", "Partial data"));
+    const errors = Array.isArray(summary?.errors) ? summary.errors.filter(isReadableText).slice(0, 3) : [];
+    if (errors.length > 0) {
+      const list = createElement("ul", "alert-summary__details-errors");
+      errors.forEach(function (error) {
+        list.append(createElement("li", "", error));
+      });
+      warning.append(list);
+    } else {
+      warning.append(createElement("span", "", "Some saved locations could not be checked."));
+    }
+    return warning;
+  }
+
+  function renderAlertRef(alertRef) {
+    const item = createElement("article", "alert-summary__detail-alert");
+    const color = validHex(alertRef?.color_hex) ? alertRef.color_hex : "#64748b";
+    item.style.setProperty("--detail-alert-color", color);
+
+    const header = createElement("div", "alert-summary__detail-alert-header");
+    const marker = createElement("span", "alert-summary__detail-marker");
+    marker.setAttribute("aria-label", "Alert severity color");
+    marker.setAttribute("role", "img");
+
+    const title = createElement("div", "alert-summary__detail-title");
+    const titleLine = createElement("div", "alert-summary__detail-title-line");
+    titleLine.append(sourceBadge(alertRef?.source), createElement("strong", "", alertRef?.event || alertRef?.id || "Alert"));
+    title.append(titleLine, renderAlertMeta(alertRef));
+
+    header.append(marker, title);
+    item.append(header, renderAffectedLocations(alertRef));
+    return item;
+  }
+
+  function renderAlertMeta(alertRef) {
+    const meta = createElement("div", "alert-summary__detail-meta");
+    meta.append(createElement("span", "", categoryLabel(alertRef?.event)));
+    const priority = Number(alertRef?.priority_score ?? alertRef?.priority);
+    if (Number.isFinite(priority)) {
+      meta.append(createElement("span", "", `Priority ${priority}`));
+    }
+    const count = Number(alertRef?.affected_location_count);
+    if (Number.isFinite(count)) {
+      meta.append(createElement("span", "", `${count} affected ${count === 1 ? "location" : "locations"}`));
+    }
+    return meta;
+  }
+
+  function renderAffectedLocations(alertRef) {
+    const locations = Array.isArray(alertRef?.affected_locations) ? alertRef.affected_locations : [];
+    const wrap = createElement("div", "alert-summary__affected");
+    if (locations.length === 0) {
+      wrap.append(createElement("p", "alert-summary__affected-empty", "No affected saved-location details available."));
+      return wrap;
+    }
+    const list = createElement("ul", "alert-summary__affected-list");
+    locations.forEach(function (location) {
+      const row = createElement("li", "alert-summary__affected-item");
+      const main = createElement("span", "alert-summary__affected-main", locationLabel(location));
+      const detail = locationDetails(location);
+      row.append(main);
+      if (detail) {
+        row.append(createElement("span", "alert-summary__affected-detail", detail));
+      }
+      if (location?.match_type) {
+        row.append(createElement("span", "alert-summary__match-type", `Match: ${formatMatchType(location.match_type)}`));
+      }
+      list.append(row);
+    });
+    wrap.append(list);
+    return wrap;
+  }
+
+  function sourceBadge(source) {
+    const normalized = String(source || "nws").toLowerCase();
+    const isTest = normalized === "test" || normalized === "molecast_test";
+    const label = isTest ? "TEST" : "NWS";
+    const badge = createElement("span", `alert-summary__source-badge alert-summary__source-badge--${isTest ? "test" : "nws"}`, label);
+    return badge;
+  }
+
+  function categoryLabel(event) {
+    const text = String(event || "").toLowerCase();
+    if (text.includes("warning")) {
+      return "Warning";
+    }
+    if (text.includes("watch")) {
+      return "Watch";
+    }
+    if (text.includes("advisory")) {
+      return "Advisory";
+    }
+    return "Other";
+  }
+
+  function locationLabel(location) {
+    return location?.label || location?.name || [location?.city, location?.state].filter(Boolean).join(", ") || "Saved location";
+  }
+
+  function locationDetails(location) {
+    const locality = [location?.city, location?.state].filter(Boolean).join(", ");
+    const parts = [];
+    if (location?.zip_code) {
+      parts.push(location.zip_code);
+    }
+    if (locality) {
+      parts.push(locality);
+    }
+    if (location?.county) {
+      parts.push(location.county);
+    }
+    return parts.join(" | ");
+  }
+
+  function formatMatchType(matchType) {
+    return String(matchType || "").replace(/_/g, " ");
+  }
+
+  function isReadableText(value) {
+    return typeof value === "string" && value.trim() && value.length < 220;
   }
 
   function validHex(value) {

@@ -2,6 +2,17 @@
 
 Molecast release notes will be tracked here.
 
+## 0.7.4 - 2026-05-04
+
+- Added the combined frontend UI milestone for dashboard header/logo polish and saved alert details drilldown.
+- Added the unified Midnight Teal Operations dashboard header with the Molecast logo as the top-left home link using `backend/app/static/img/molecast-logo-header.png`.
+- Preserved the clean silver/white logo aspect ratio and avoided the red hook-echo logo.
+- Added a prominent active-location bar with Edit Location and Saved Locations actions that reuse and focus the existing active-location editor and saved-location section.
+- Grouped existing alert audio, test audio, silence, and acknowledge controls into the header without changing alert behavior.
+- Added a saved-scope alert details drilldown for the All Saved Locations counter using `GET /api/alerts/summary?scope=saved` `alert_refs` and `affected_locations`.
+- Displayed NWS/TEST source, event, severity color marker, category, priority score, affected saved locations, and match type in the drilldown.
+- Handled empty, partial, and unavailable-details states while preserving active-location-only alert banners, alert counter scope behavior, saved-location panel behavior, test-alert editor behavior, and clean `test/alerts_test.json` hygiene.
+
 ## 0.7.3 - 2026-05-04
 
 - Added the frontend scoped alert counter UI for alert summaries.

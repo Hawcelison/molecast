@@ -12,30 +12,46 @@
 <script src="/static/js/modules/alert-icons.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-audio.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-banners.js?v=alert-ui-20260501b" defer></script>
-<script src="/static/js/modules/alert-summary.js?v=alert-summary-scope-20260504" defer></script>
-<script src="/static/js/location-editor.js?v=saved-location-rename-edit-20260503" defer></script>
+<script src="/static/js/modules/alert-summary.js?v=saved-alert-details-20260504" defer></script>
+<script src="/static/js/location-editor.js?v=header-location-bar-20260504" defer></script>
 {% endblock %}
 
 {% block content %}
 <main id="dashboard">
-  <div id="alert-controls" class="alert-controls" aria-label="Alert controls"></div>
+  <header class="dashboard-header">
+    <a class="dashboard-header__brand" href="/" aria-label="Molecast dashboard home">
+      <img
+        class="dashboard-header__logo"
+        src="/static/img/molecast-logo-header.png"
+        alt="Molecast"
+      >
+    </a>
+    <section class="active-location-bar" aria-labelledby="active-location-display">
+      <div class="active-location-bar__main">
+        <p id="active-location-display" class="active-location-bar__title">Active Location: Loading</p>
+        <p id="location-metadata-status" class="active-location-bar__status">NWS metadata: checking</p>
+      </div>
+      <div class="active-location-bar__actions" aria-label="Location actions">
+        <button
+          id="location-editor-toggle"
+          class="location-panel__button location-panel__button--primary"
+          type="button"
+          aria-controls="location-editor-panel"
+          aria-expanded="false"
+        >Edit Location</button>
+        <button
+          id="location-saved-locations-open"
+          class="location-panel__button"
+          type="button"
+          aria-controls="location-editor-panel"
+        >Saved Locations</button>
+      </div>
+    </section>
+    <div id="alert-controls" class="alert-controls" aria-label="Alert controls"></div>
+  </header>
   <section id="alert-summary-counter" class="alert-summary" aria-label="Alert counter" aria-live="polite"></section>
   <div id="alert-banner-container" class="alert-banner-container" role="list" aria-live="polite"></div>
-  <h1>Molecast</h1>
-  <section class="location-panel" aria-labelledby="active-location-display">
-    <div class="location-panel__summary">
-      <div>
-        <p id="active-location-display" class="location-panel__title">Location: Loading</p>
-        <p id="location-metadata-status" class="location-panel__status">NWS metadata: checking</p>
-      </div>
-      <button
-        id="location-editor-toggle"
-        class="location-panel__button"
-        type="button"
-        aria-controls="location-editor-panel"
-        aria-expanded="false"
-      >Edit location</button>
-    </div>
+  <section class="location-panel" aria-label="Active location editor">
     <div id="location-editor-panel" class="location-editor" hidden>
       <form id="location-editor-form" class="location-editor__form">
         <div class="location-editor__search">
@@ -65,7 +81,7 @@
           </div>
           <p id="location-preview-pin-status" class="location-editor__pin-status" role="status" aria-live="polite" hidden></p>
         </div>
-        <section class="location-editor__saved" aria-labelledby="location-saved-title">
+        <section class="location-editor__saved" aria-labelledby="location-saved-title" tabindex="-1">
           <div class="location-editor__saved-header">
             <h2 id="location-saved-title">Saved locations</h2>
             <div class="location-editor__saved-actions">
