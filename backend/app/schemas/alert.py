@@ -90,3 +90,36 @@ class ActiveAlertsResponse(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("Alert refresh timestamp must include timezone information.")
         return value.astimezone(UTC)
+
+
+class AlertSummaryHighestAlert(BaseModel):
+    id: str
+    source: str
+    event: str | None = None
+    priority: int
+    priority_score: int
+    color_hex: str
+
+
+class AlertSummaryResponse(BaseModel):
+    scope: str
+    scope_label: str
+    total: int
+    warning_count: int
+    watch_count: int
+    advisory_count: int
+    other_count: int
+    highest_alert: AlertSummaryHighestAlert | None = None
+    updated_at: datetime
+    refresh_interval_seconds: int
+    saved_location_count: int | None = None
+    affected_location_count: int | None = None
+    partial: bool = False
+    errors: list[str] = Field(default_factory=list)
+
+    @field_validator("updated_at")
+    @classmethod
+    def require_utc_updated_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Alert summary update timestamp must include timezone information.")
+        return value.astimezone(UTC)

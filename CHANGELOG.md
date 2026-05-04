@@ -2,6 +2,16 @@
 
 Molecast release notes will be tracked here.
 
+## 0.7.0 - 2026-05-04
+
+- Added the backend active-scope alert summary foundation at `GET /api/alerts/summary?scope=active`.
+- Defaulted alert summary scope to active and built active summary counts from the same active-location alert stream used by `/api/alerts/active`.
+- Preserved `/api/alerts/active` behavior so alert banners remain active-location only.
+- Added shared summary/counting logic for total, warning, watch, advisory, other, highest alert, scope metadata, partial status, and errors.
+- Preserved NWS/test alert source identity in summary highest-alert metadata.
+- Returned an intentional `501 Not Implemented` for `scope=saved` because saved-location aggregation is the next phase.
+- Kept `test/alerts_test.json` clean during validation.
+
 ## 0.6.2 - 2026-05-03
 
 - Added saved-location rename/edit polish to the existing saved-location panel.
