@@ -129,6 +129,28 @@ def test_search_service_returns_address_results_for_address_like_query() -> None
     assert address_service.calls[0].address == "4222 Fireside Ave Portage MI"
 
 
+def test_search_service_prioritizes_address_like_queries_without_regressing_local_ordering() -> None:
+    address_service = FakeAddressLookupService()
+    service = LocationResolverService(
+        LocationLookupRepository(Path("backend/app/data/location_lookup.sqlite3")),
+        address_service=address_service,
+    )
+
+    address_response = service.search("4222 Fireside Ave Portage MI", limit=8)
+    zip_response = service.search("49002", limit=8)
+    city_response = service.search("Portage MI", limit=8)
+
+    assert address_response.results[0].kind == "address"
+    assert address_response.results[0].label == "4222 FIRESIDE AVE, PORTAGE, MI, 49002"
+    assert zip_response.results[0].kind == "zip"
+    assert zip_response.results[0].ref == "zip:49002"
+    assert city_response.results[0].kind == "city"
+    assert city_response.results[0].city == "Portage"
+    assert address_service.calls == [
+        AddressGeocodeRequest(address="4222 Fireside Ave Portage MI", limit=8)
+    ]
+
+
 def test_search_service_skips_address_provider_for_city_like_query() -> None:
     address_service = FakeAddressLookupService()
     service = LocationResolverService(
@@ -163,12 +185,12 @@ def test_search_service_reports_address_provider_warning_without_breaking_local_
         address_service=address_service,
     )
 
-    response = service.search("49002 4222 Fireside", limit=8, types="zip,address")
+    response = service.search("49002 4222 Fireside Ave", limit=8, types="zip,address")
 
     assert response.count >= 1
     assert response.results[0].kind == "zip"
     assert response.warnings == ["address_search_unavailable"]
-    assert address_service.calls[0].address == "49002 4222 Fireside"
+    assert address_service.calls[0].address == "49002 4222 Fireside Ave"
 
 
 def test_search_endpoint_limit_is_applied() -> None:

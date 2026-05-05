@@ -36,6 +36,10 @@ MAX_SEARCH_LIMIT = 20
 VALID_SEARCH_TYPES = {"zip", "city", "address"}
 OFFICE_MAPPING_PATH = settings.app_dir / "data" / "nws_offices.json"
 ADDRESS_SEARCH_UNAVAILABLE_WARNING = "address_search_unavailable"
+STREET_SUFFIX_PATTERN = re.compile(
+    r"\b(st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|boulevard|ct|court|way|cir|circle|pkwy|parkway)\.?(?=\s|$|[,.])",
+    re.IGNORECASE,
+)
 
 
 class InvalidLocationSearchTypeError(ValueError):
@@ -75,8 +79,12 @@ class LocationResolverService:
         results: list[LocationSearchSuggestion] = []
         seen_refs: set[str] = set()
         warnings: list[str] = []
+        address_like_query = is_address_like_query(normalized_query)
 
-        if "zip" in search_types:
+        if address_like_query and "address" in search_types:
+            self._append_address_results(normalized_query, results, seen_refs, warnings, capped_limit)
+
+        if "zip" in search_types and len(results) < capped_limit:
             for record in self.repository.search_zip_prefix(_zip_query(normalized_query), capped_limit):
                 _append_unique(results, seen_refs, zip_suggestion(record), capped_limit)
 
@@ -90,19 +98,8 @@ class LocationResolverService:
             ):
                 _append_unique(results, seen_refs, city_suggestion(record), capped_limit)
 
-        if "address" in search_types and len(results) < capped_limit and is_address_like_query(normalized_query):
-            remaining_limit = capped_limit - len(results)
-            try:
-                address_response = self.address_service.lookup(
-                    AddressGeocodeRequest(address=normalized_query, limit=remaining_limit)
-                )
-            except (AddressGeocoderValidationError, AddressGeocoderError):
-                address_response = None
-                warnings.append(ADDRESS_SEARCH_UNAVAILABLE_WARNING)
-
-            if address_response:
-                for candidate in address_response.candidates:
-                    _append_unique(results, seen_refs, address_suggestion(candidate), capped_limit)
+        if not address_like_query and "address" in search_types and len(results) < capped_limit:
+            self._append_address_results(normalized_query, results, seen_refs, warnings, capped_limit)
 
         return LocationSearchResponse(
             query=normalized_query,
@@ -110,6 +107,29 @@ class LocationResolverService:
             results=results,
             warnings=warnings,
         )
+
+    def _append_address_results(
+        self,
+        normalized_query: str,
+        results: list[LocationSearchSuggestion],
+        seen_refs: set[str],
+        warnings: list[str],
+        capped_limit: int,
+    ) -> None:
+        if len(results) >= capped_limit or not is_address_like_query(normalized_query):
+            return
+
+        remaining_limit = capped_limit - len(results)
+        try:
+            address_response = self.address_service.lookup(
+                AddressGeocodeRequest(address=normalized_query, limit=remaining_limit)
+            )
+        except (AddressGeocoderValidationError, AddressGeocoderError):
+            warnings.append(ADDRESS_SEARCH_UNAVAILABLE_WARNING)
+            return
+
+        for candidate in address_response.candidates:
+            _append_unique(results, seen_refs, address_suggestion(candidate), capped_limit)
 
     def preview_nws_point(self, latitude: float, longitude: float) -> NwsPointPreviewResponse:
         metadata = self.points_service.fetch_points_metadata(latitude, longitude)
@@ -183,7 +203,8 @@ def parse_city_query(query: str) -> ParsedCityQuery:
 def is_address_like_query(query: str) -> bool:
     return (
         len(query) >= MIN_ADDRESS_QUERY_LENGTH
-        and bool(re.search(r"\d+\s+\S+", query))
+        and bool(re.search(r"\b\d+[A-Za-z]?\b", query))
+        and bool(STREET_SUFFIX_PATTERN.search(query))
         and has_structure_number_and_street_name(query)
     )
 
