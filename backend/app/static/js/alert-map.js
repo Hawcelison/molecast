@@ -16,6 +16,7 @@
     boundMap: null,
     retryTimer: null,
     mapInitRetries: 0,
+    visible: true,
   };
 
   function getMap() {
@@ -174,6 +175,16 @@
         },
       });
     }
+
+    applyLayerVisibility(map);
+  }
+
+  function applyLayerVisibility(map) {
+    [FILL_LAYER_ID, LINE_LAYER_ID, SELECTED_LINE_LAYER_ID].forEach(function (layerId) {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, "visibility", state.visible ? "visible" : "none");
+      }
+    });
   }
 
   function reassertLayerOrder() {
@@ -332,6 +343,18 @@
     flushRender();
   }
 
+  function setVisible(visible) {
+    const map = getMap();
+    state.visible = Boolean(visible);
+    if (map) {
+      applyLayerVisibility(map);
+    }
+  }
+
+  function isVisible() {
+    return state.visible;
+  }
+
   function prefersReducedMotion() {
     return Boolean(
       window.matchMedia &&
@@ -357,6 +380,8 @@
     renderAlerts: renderAlerts,
     focusAlert: focusAlert,
     clearSelection: clearSelection,
+    setVisible: setVisible,
+    isVisible: isVisible,
   };
 
   document.addEventListener("DOMContentLoaded", function () {

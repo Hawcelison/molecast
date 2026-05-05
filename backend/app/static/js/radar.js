@@ -194,6 +194,10 @@
     showFrame(state.currentFrameIndex);
   }
 
+  function isVisible() {
+    return state.visible;
+  }
+
   function toggle() {
     setVisible(!state.visible);
     return state.visible;
@@ -500,6 +504,7 @@
     refresh: function () { return loadRadar("manual"); },
     next: nextFrame,
     setVisible: setVisible,
+    isVisible: isVisible,
     setAutoRefreshEnabled: setAutoRefreshEnabled,
     start: startAnimation,
     stop: stopAnimation,

@@ -41,6 +41,15 @@
     return state.visible;
   }
 
+  function isVisible() {
+    return state.visible;
+  }
+
+  function isAvailable() {
+    const config = getConfig();
+    return Boolean(config.enabled !== false && config.geoJsonUrl);
+  }
+
   async function initializeCountyBoundaries() {
     const map = getMap();
     const config = getConfig();
@@ -109,6 +118,8 @@
   }
 
   window.MOLECAST_COUNTY_BOUNDARIES = {
+    isAvailable: isAvailable,
+    isVisible: isVisible,
     setVisible: setVisible,
     toggle: toggle,
   };

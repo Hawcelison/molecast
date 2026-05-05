@@ -5,6 +5,11 @@
     testAudioEnabled: false,
     alertCounterScope: "active",
     radarAutoRefreshEnabled: true,
+    layerVisibility: Object.freeze({
+      radar: true,
+      alertPolygons: true,
+      countyBoundaries: true,
+    }),
     flashingDisabled: true,
     silencedAlertIds: [],
     acknowledgedAlertIds: [],
@@ -37,6 +42,7 @@
       radarAutoRefreshEnabled: typeof settings.radarAutoRefreshEnabled === "boolean"
         ? settings.radarAutoRefreshEnabled
         : DEFAULT_SETTINGS.radarAutoRefreshEnabled,
+      layerVisibility: normalizeLayerVisibility(settings.layerVisibility),
       flashingDisabled: true,
       silencedAlertIds: normalizeIdArray(settings.silencedAlertIds),
       acknowledgedAlertIds: normalizeIdArray(settings.acknowledgedAlertIds),
@@ -56,6 +62,21 @@
     return value === "saved" ? "saved" : "active";
   }
 
+  function normalizeLayerVisibility(value) {
+    const settings = value && typeof value === "object" ? value : {};
+    return {
+      radar: typeof settings.radar === "boolean"
+        ? settings.radar
+        : DEFAULT_SETTINGS.layerVisibility.radar,
+      alertPolygons: typeof settings.alertPolygons === "boolean"
+        ? settings.alertPolygons
+        : DEFAULT_SETTINGS.layerVisibility.alertPolygons,
+      countyBoundaries: typeof settings.countyBoundaries === "boolean"
+        ? settings.countyBoundaries
+        : DEFAULT_SETTINGS.layerVisibility.countyBoundaries,
+    };
+  }
+
   function saveSettings() {
     if (!global.localStorage) {
       return;
@@ -66,6 +87,7 @@
   function getSettings() {
     return {
       ...currentSettings,
+      layerVisibility: { ...currentSettings.layerVisibility },
       silencedAlertIds: currentSettings.silencedAlertIds.slice(),
       acknowledgedAlertIds: currentSettings.acknowledgedAlertIds.slice(),
       readAlertIds: currentSettings.readAlertIds.slice(),
@@ -92,6 +114,24 @@
 
   function setRadarAutoRefreshEnabled(enabled) {
     return updateSettings({ radarAutoRefreshEnabled: Boolean(enabled) });
+  }
+
+  function setLayerVisibility(layerKey, visible) {
+    if (!Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS.layerVisibility, layerKey)) {
+      return getSettings();
+    }
+    return updateSettings({
+      layerVisibility: {
+        ...currentSettings.layerVisibility,
+        [layerKey]: Boolean(visible),
+      },
+    });
+  }
+
+  function resetLayerVisibility() {
+    return updateSettings({
+      layerVisibility: { ...DEFAULT_SETTINGS.layerVisibility },
+    });
   }
 
   function setFlashingDisabled(_disabled) {
@@ -190,8 +230,10 @@
     setAlertAudioEnabled,
     setAlertCounterScope,
     setFlashingDisabled,
+    setLayerVisibility,
     setRadarAutoRefreshEnabled,
     setTestAudioEnabled,
+    resetLayerVisibility,
     silenceAlert,
     syncReadAlertIds,
     unacknowledgeAlert,

@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="/static/js/modules/settings-store.js?v=radar-refresh-20260505" defer></script>
+<script src="/static/js/modules/settings-store.js?v=radar-layer-nav-20260505" defer></script>
 <script src="/static/js/modules/alerts-api.js?v=active-alert-refresh-20260504" defer></script>
 <script src="/static/js/modules/alert-icons.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-audio.js?v=alert-ui-20260501b" defer></script>
@@ -36,6 +36,13 @@
           <input id="radar-auto-refresh-toggle" type="checkbox" checked>
           <span>Radar auto-refresh</span>
         </label>
+        <details id="layer-control-panel" class="layer-control-panel">
+          <summary class="layer-control-panel__summary">Layers</summary>
+          <div class="layer-control__menu">
+            <div id="layer-control-list" class="layer-control__list" aria-label="Map layer visibility"></div>
+            <button id="layer-control-reset" class="layer-control__reset" type="button">Reset Layers</button>
+          </div>
+        </details>
         <button
           id="location-editor-toggle"
           class="location-panel__button location-panel__button--primary"
