@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="/static/js/test-alerts.js?v=test-editor-20260504-targets" defer></script>
+<script src="/static/js/test-alerts.js?v=test-editor-20260505-cards" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -69,8 +69,16 @@
   </section>
 
   <section class="editor-actions" aria-label="Editor actions">
-    <button type="button" id="reload-alerts">Reload from file</button>
     <button type="button" id="add-alert">Add alert</button>
+    <label class="editor-filter">
+      Search
+      <input id="alert-filter" type="search" placeholder="Event, ID, target, area">
+    </label>
+    <label class="editor-filter editor-filter--check">
+      <input id="filter-enabled-only" type="checkbox">
+      Enabled only
+    </label>
+    <button type="button" id="reload-alerts">Reload from file</button>
     <button type="button" id="enable-all-alerts">Enable all alerts</button>
     <button type="button" id="disable-all-alerts">Disable all alerts</button>
     <button type="button" id="save-all-alerts" class="primary-action">Save JSON</button>
@@ -79,7 +87,10 @@
 
   <section class="editor-grid">
     <div class="alert-list-panel">
-      <h2>Alerts</h2>
+      <div class="alert-list-heading">
+        <h2>Scenarios</h2>
+        <span id="visible-alert-count" class="alert-list-count">0 shown</span>
+      </div>
       <div class="alert-list-sortbar" aria-label="Alert sort controls">
         <button type="button" class="sort-header" data-sort-key="id">ID <span data-sort-indicator="id"></span></button>
         <button type="button" class="sort-header" data-sort-key="event">Event <span data-sort-indicator="event"></span></button>
@@ -90,7 +101,8 @@
       <div id="test-alert-table" class="test-alert-list" aria-live="polite"></div>
     </div>
 
-    <form id="test-alert-form" class="alert-form">
+    <div id="inline-editor-host" hidden>
+    <form id="test-alert-form" class="alert-form" aria-label="Inline test alert editor">
       <div class="form-heading">
         <h2>Edit Alert</h2>
         <label class="enabled-toggle">
@@ -206,11 +218,13 @@
 
       <div class="form-actions">
         <button type="submit" class="primary-action">Save Alert</button>
+        <button type="button" id="cancel-alert-edit">Cancel</button>
         <button type="button" id="disable-alert">Disable Alert</button>
         <button type="button" id="clone-alert">Clone Alert</button>
         <button type="button" id="delete-alert" class="danger-action">Delete Alert</button>
       </div>
     </form>
+    </div>
   </section>
 </main>
 {% endblock %}

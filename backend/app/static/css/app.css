@@ -1626,9 +1626,32 @@ table {
 .editor-actions,
 .form-actions,
 .time-tools {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.editor-filter {
+  align-items: center;
+  display: inline-flex;
+  font-size: 0.85rem;
+  font-weight: 800;
+  gap: 0.45rem;
+}
+
+.editor-filter input[type="search"] {
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: CanvasText;
+  font: inherit;
+  min-width: min(22rem, 55vw);
+  padding: 0.5rem 0.6rem;
+}
+
+.editor-filter--check input {
+  flex: 0 0 auto;
 }
 
 button,
@@ -1662,7 +1685,7 @@ button {
   align-items: start;
   display: grid;
   gap: 12px;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   margin-top: 1rem;
 }
 
@@ -1672,6 +1695,19 @@ button {
   border-radius: 6px;
   min-width: 0;
   padding: 0.875rem;
+}
+
+.alert-list-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.alert-list-count {
+  color: color-mix(in srgb, currentColor 62%, transparent);
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 .alert-table-wrap {
@@ -1702,9 +1738,10 @@ button {
 }
 
 .test-alert-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+  align-items: start;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 27rem), 1fr));
   margin-top: 0.75rem;
   width: 100%;
 }
@@ -1713,16 +1750,13 @@ button {
   --event-color: #3399ff;
   border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
   border-left: 6px solid var(--event-color);
+  border-radius: 6px;
   box-sizing: border-box;
   display: grid;
   gap: 0.65rem;
   min-width: 0;
   overflow: hidden;
   padding: 0.8rem 0.85rem 0.85rem;
-}
-
-.test-alert-card + .test-alert-card {
-  border-top: 0;
 }
 
 .test-alert-card:nth-child(odd) {
@@ -1793,6 +1827,14 @@ button {
   background: #374151;
 }
 
+.test-alert-badge--enabled {
+  background: #166534;
+}
+
+.test-alert-badge--disabled {
+  background: #6b7280;
+}
+
 .test-alert-card__id {
   align-items: baseline;
   display: flex;
@@ -1821,7 +1863,7 @@ button {
 .test-alert-meta {
   display: grid;
   gap: 0.45rem 0.75rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   min-width: 0;
 }
 
@@ -1845,7 +1887,7 @@ button {
 .test-alert-times {
   display: grid;
   gap: 0.55rem 0.75rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   min-width: 0;
 }
 
@@ -1859,6 +1901,25 @@ button {
   font-weight: 800;
   margin-bottom: 0.25rem;
   text-transform: uppercase;
+}
+
+.test-alert-time-group__value {
+  overflow-wrap: anywhere;
+}
+
+.test-alert-card__editor-slot {
+  border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  margin-top: 0.25rem;
+  padding-top: 0.75rem;
+}
+
+.test-alert-card__editor-slot .alert-form {
+  border: 0;
+  padding: 0;
+}
+
+.test-alert-card--expanded {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 760px) {
@@ -1878,6 +1939,11 @@ button {
 
   .actions-wrap button {
     flex: 1 1 auto;
+  }
+
+  .editor-filter,
+  .editor-filter input[type="search"] {
+    width: 100%;
   }
 }
 

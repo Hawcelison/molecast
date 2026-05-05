@@ -68,6 +68,7 @@
   let payload = null;
   let selectedIndex = -1;
   let sortState = { key: "", direction: "asc" };
+  let filterState = { text: "", enabledOnly: false };
   let geometryMap = null;
   let geometryMarker = null;
   let geometryVertexMarkers = [];
@@ -81,6 +82,7 @@
   let editorState = {
     originalAlertId: null,
     isNewAlert: false,
+    originalFormValues: null,
     currentFormValues: null,
   };
 
@@ -723,6 +725,7 @@
     editorState = {
       originalAlertId: null,
       isNewAlert: false,
+      originalFormValues: null,
       currentFormValues: null,
     };
     byId("field-enabled").checked = false;
@@ -774,6 +777,8 @@
   function sortedAlertEntries() {
     const entries = currentAlerts().map(function (alert, index) {
       return { alert, index };
+    }).filter(function (entry) {
+      return alertMatchesFilter(entry.alert);
     });
     if (!sortState.key) {
       return entries;
@@ -792,6 +797,28 @@
       return left.index - right.index;
     });
     return entries;
+  }
+
+  function alertMatchesFilter(alert) {
+    if (filterState.enabledOnly && alert.enabled !== true) {
+      return false;
+    }
+    const query = filterState.text.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+    const haystack = [
+      alert.id,
+      alert.event,
+      alert.severity,
+      alert.urgency,
+      alert.certainty,
+      alert.areaDesc,
+      targetSummary(alert),
+      alert.headline,
+      alert.description,
+    ].join(" ").toLowerCase();
+    return haystack.includes(query);
   }
 
   function sortableValue(alert, key, valueType) {
@@ -845,6 +872,50 @@
     return badge;
   }
 
+  function joinSummaryParts(parts) {
+    return parts.filter(Boolean).join(" | ");
+  }
+
+  function targetSummary(alert) {
+    const targets = alert && alert.targets && typeof alert.targets === "object" ? alert.targets : {};
+    const parameters = alert && alert.parameters && typeof alert.parameters === "object" ? alert.parameters : {};
+    const zones = Array.isArray(alert?.affectedZones)
+      ? alert.affectedZones.map(function (zoneUrl) { return normalizeZoneId(zoneUrl); }).filter(Boolean)
+      : [];
+    const parts = [
+      Array.isArray(targets.zip_codes) && targets.zip_codes.length ? `ZIP ${targets.zip_codes.join(", ")}` : "",
+      Array.isArray(targets.location_ids) && targets.location_ids.length ? `Saved ${targets.location_ids.join(", ")}` : "",
+      Array.isArray(targets.county_fips) && targets.county_fips.length ? `FIPS ${targets.county_fips.join(", ")}` : "",
+      Array.isArray(targets.county_zones) && targets.county_zones.length ? `County ${targets.county_zones.join(", ")}` : "",
+      Array.isArray(targets.forecast_zones) && targets.forecast_zones.length ? `Forecast ${targets.forecast_zones.join(", ")}` : "",
+      Array.isArray(targets.same) && targets.same.length ? `SAME ${targets.same.join(", ")}` : "",
+      Array.isArray(targets.ugc) && targets.ugc.length ? `UGC ${targets.ugc.join(", ")}` : "",
+      Array.isArray(parameters.zipCode) && parameters.zipCode.length ? `Param ZIP ${parameters.zipCode.join(", ")}` : "",
+      zones.length ? `Zones ${zones.join(", ")}` : "",
+    ];
+    return joinSummaryParts(parts) || "Legacy area/geometry matching";
+  }
+
+  function prioritySummary(alert) {
+    const severity = alert.severity || "Unknown";
+    const urgency = alert.urgency || "Unknown";
+    const certainty = alert.certainty || "Unknown";
+    return `${severity} / ${urgency} / ${certainty}`;
+  }
+
+  function timeSummary(alert) {
+    const relativeTime = alert && typeof alert.relative_time === "object" ? alert.relative_time : null;
+    if (relativeTime) {
+      const effective = relativeTime.effective_minutes_from_now;
+      const expires = relativeTime.expires_minutes_from_now;
+      return `Relative ${effective}m to ${expires}m`;
+    }
+    return joinSummaryParts([
+      alert.effective ? `Effective ${alert.effective}` : "",
+      alert.expires ? `Expires ${alert.expires}` : "",
+    ]) || "No time window";
+  }
+
   function makeMetaItem(label, value) {
     const item = document.createElement("div");
     item.className = "test-alert-meta__item";
@@ -861,7 +932,10 @@
   function renderTable() {
     const list = byId("test-alert-table");
     const alerts = currentAlerts();
+    const entries = sortedAlertEntries();
+    parkInlineEditor();
     byId("test-alert-count").textContent = String(alerts.length);
+    byId("visible-alert-count").textContent = `${entries.length} shown`;
     updateSortIndicators();
 
     if (!alerts.length) {
@@ -869,17 +943,29 @@
       empty.className = "alert-empty";
       empty.textContent = "No test alerts found.";
       list.replaceChildren(empty);
+      mountInlineEditor();
       return;
     }
 
-    list.replaceChildren(...sortedAlertEntries().map(function (entry) {
+    if (!entries.length) {
+      const empty = document.createElement("p");
+      empty.className = "alert-empty";
+      empty.textContent = "No test alerts match the current filter.";
+      list.replaceChildren(empty);
+      mountInlineEditor();
+      return;
+    }
+
+    list.replaceChildren(...entries.map(function (entry) {
       const alert = entry.alert;
       const index = entry.index;
       const row = document.createElement("article");
       row.className = "test-alert-card";
+      row.dataset.alertIndex = String(index);
       row.style.setProperty("--event-color", getAlertColor(alert));
       if (index === selectedIndex) {
         row.classList.add("selected-row");
+        row.classList.add("test-alert-card--expanded");
       }
 
       const enabled = document.createElement("input");
@@ -902,7 +988,10 @@
           ["Clone", "", function () { cloneAlert(index).catch(showError); }],
         ],
         [
-          ["Activate", "primary-action", function () { activateAlertAtIndex(index).catch(showError); }],
+          [alert.enabled === true ? "Disable" : "Enable", alert.enabled === true ? "" : "primary-action", function () {
+            toggleAlertEnabled(index).catch(showError);
+          }],
+          ["Activate", "", function () { activateAlertAtIndex(index).catch(showError); }],
           ["Expire", "", function () { expireAlertAtIndex(index).catch(showError); }],
         ],
         [
@@ -934,7 +1023,9 @@
       titleWrap.append(title);
       const badges = document.createElement("div");
       badges.className = "test-alert-card__badges";
+      badges.append(makeBadge("TEST", "test-alert-badge--source"));
       badges.append(makeBadge(alert.severity || "Unknown", "", getAlertColor({ severity: alert.severity })));
+      badges.append(makeBadge(alert.enabled === true ? "Enabled" : "Disabled", alert.enabled === true ? "test-alert-badge--enabled" : "test-alert-badge--disabled"));
       const enabledWrap = document.createElement("label");
       enabledWrap.className = "test-alert-card__enabled";
       const enabledText = document.createElement("span");
@@ -954,29 +1045,61 @@
       const meta = document.createElement("div");
       meta.className = "test-alert-meta";
       meta.append(
-        makeMetaItem("Area", alert.areaDesc || ""),
-        makeMetaItem("Urgency", alert.urgency || ""),
-        makeMetaItem("Certainty", alert.certainty || "")
+        makeMetaItem("Priority", prioritySummary(alert)),
+        makeMetaItem("Targets", targetSummary(alert)),
+        makeMetaItem("Area", alert.areaDesc || "")
       );
 
       const times = document.createElement("div");
       times.className = "test-alert-times";
-      [
-        ["Effective", alert.effective || ""],
-        ["Expires", alert.expires || ""],
-      ].forEach(function (config) {
-        const timeGroup = document.createElement("div");
-        timeGroup.className = "test-alert-time-group";
-        const label = document.createElement("span");
-        label.className = "test-alert-time-group__label";
-        label.textContent = `${config[0]}:`;
-        timeGroup.append(label, makeTimeCell(config[1]));
-        times.append(timeGroup);
-      });
+      const timeGroup = document.createElement("div");
+      timeGroup.className = "test-alert-time-group";
+      const timeLabel = document.createElement("span");
+      timeLabel.className = "test-alert-time-group__label";
+      timeLabel.textContent = "Window:";
+      const timeValue = document.createElement("span");
+      timeValue.className = "test-alert-time-group__value";
+      timeValue.textContent = timeSummary(alert);
+      timeGroup.append(timeLabel, timeValue);
+      times.append(timeGroup);
 
       row.append(topLine, idLine, meta, times, actionsWrap);
+      if (index === selectedIndex) {
+        const inlineSlot = document.createElement("div");
+        inlineSlot.className = "test-alert-card__editor-slot";
+        inlineSlot.id = "inline-editor-slot";
+        row.append(inlineSlot);
+      }
       return row;
     }));
+    mountInlineEditor();
+  }
+
+  function parkInlineEditor() {
+    const form = byId("test-alert-form");
+    const host = byId("inline-editor-host");
+    if (!form || !host || host.contains(form)) {
+      return;
+    }
+    host.append(form);
+  }
+
+  function mountInlineEditor() {
+    const form = byId("test-alert-form");
+    const host = byId("inline-editor-host");
+    const slot = byId("inline-editor-slot");
+    if (!form || !host) {
+      return;
+    }
+    if (selectedIndex >= 0 && slot) {
+      host.hidden = true;
+      form.hidden = false;
+      slot.replaceChildren(form);
+      return;
+    }
+    host.append(form);
+    host.hidden = true;
+    form.hidden = true;
   }
 
   function getParameterObjectFromRaw() {
@@ -1624,6 +1747,7 @@
     editorState = {
       originalAlertId: alert.id || null,
       isNewAlert: false,
+      originalFormValues: cloneValue(alert),
       currentFormValues: cloneValue(alert),
     };
     byId("field-enabled").checked = alert.enabled === true;
@@ -1852,6 +1976,7 @@
     editorState = {
       originalAlertId: addedId,
       isNewAlert: true,
+      originalFormValues: cloneValue(payload.alerts[selectedIndex]),
       currentFormValues: cloneValue(payload.alerts[selectedIndex]),
     };
     byId("field-id").readOnly = false;
@@ -1880,6 +2005,7 @@
     editorState = {
       originalAlertId: cloned.id,
       isNewAlert: true,
+      originalFormValues: cloneValue(cloned),
       currentFormValues: cloneValue(cloned),
     };
     byId("field-id").readOnly = false;
@@ -1904,6 +2030,23 @@
     setStagedMessage("Delete staged.");
   }
 
+  async function toggleAlertEnabled(index) {
+    const alert = currentAlerts()[index];
+    if (!alert) {
+      return;
+    }
+    if (selectedIndex >= 0 && selectedIndex === index) {
+      applyFormToPayload();
+    }
+    alert.enabled = alert.enabled !== true;
+    alert.source = "test";
+    if (selectedIndex === index) {
+      renderSelectedAlertForm(alert);
+    }
+    renderTable();
+    setStagedMessage(alert.enabled ? "Alert enabled in the editor." : "Alert disabled in the editor.");
+  }
+
   async function disableSelected() {
     if (selectedIndex < 0) {
       return;
@@ -1911,6 +2054,34 @@
     byId("field-enabled").checked = false;
     applyFormToPayload();
     setStagedMessage("Selected alert disabled in the editor.");
+  }
+
+  function cancelEdit() {
+    if (selectedIndex < 0) {
+      clearSelectedAlertForm();
+      renderTable();
+      return;
+    }
+    if (editorState.isNewAlert) {
+      payload.alerts.splice(selectedIndex, 1);
+      selectedIndex = -1;
+      clearSelectedAlertForm();
+      renderTable();
+      setStatus("New alert canceled.");
+      return;
+    }
+    if (editorState.originalFormValues) {
+      const targetIndex = findAlertIndexById(editorState.originalAlertId) >= 0
+        ? findAlertIndexById(editorState.originalAlertId)
+        : selectedIndex;
+      if (targetIndex >= 0 && currentAlerts()[targetIndex]) {
+        currentAlerts()[targetIndex] = cloneValue(editorState.originalFormValues);
+      }
+    }
+    selectedIndex = -1;
+    clearSelectedAlertForm();
+    renderTable();
+    setStatus("Edit canceled.");
   }
 
   async function disableAll() {
@@ -2108,6 +2279,15 @@
     byId("disable-alert").addEventListener("click", function () { disableSelected().catch(showError); });
     byId("clone-alert").addEventListener("click", function () { cloneAlert(selectedIndex).catch(showError); });
     byId("delete-alert").addEventListener("click", function () { deleteAlert(selectedIndex).catch(showError); });
+    byId("cancel-alert-edit").addEventListener("click", cancelEdit);
+    byId("alert-filter").addEventListener("input", function () {
+      filterState.text = byId("alert-filter").value;
+      renderTable();
+    });
+    byId("filter-enabled-only").addEventListener("change", function () {
+      filterState.enabledOnly = byId("filter-enabled-only").checked;
+      renderTable();
+    });
   }
 
   function showError(error) {
