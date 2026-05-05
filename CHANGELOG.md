@@ -2,6 +2,15 @@
 
 Molecast release notes will be tracked here.
 
+## 0.8.0 - 2026-05-05
+
+- Feature: production/test mode separation with public safety controls
+- Added MOLECAST_PUBLIC_MODE and MOLECAST_ENABLE_TEST_ALERTS
+- Public mode blocks test alert editor and mutation endpoints
+- Test alerts can be globally enabled/disabled without affecting NWS alerts
+- Maintains identical rendering/behavior between test and NWS alerts
+- Preserves TEST labeling and source identity
+
 ## 0.7.6 - 2026-05-05
 
 - Security: removed tracked .env from the repository and preserved local-only environment handling.
