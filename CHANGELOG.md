@@ -2,6 +2,12 @@
 
 Molecast release notes will be tracked here.
 
+## 0.7.6 - 2026-05-05
+
+- Security: removed tracked .env from the repository and preserved local-only environment handling.
+- Fix: prioritized address/geocoder results for street-address searches such as 4222 Fireside Ave Portage MI.
+- Tests: added regression coverage for address, ZIP-only, and city/state search ordering.
+
 ## 0.7.5 - 2026-05-05
 
 - Refined the saved-scope alert drilldown with grouping by affected saved location and compact filters for All, Warnings, Watches, Advisories, TEST, and NWS.
