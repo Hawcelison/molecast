@@ -51,7 +51,17 @@ def get_alert_summary(
     normalized_scope = scope.strip().lower()
     if normalized_scope == "saved":
         locations = location_service.list_locations(db, settings)
-        return saved_alert_summary_service.get_saved_summary(locations)
+        active_location = location_service.get_active_location(db, settings)
+        active_alerts = None
+        try:
+            active_alerts, _ = active_alert_service.get_active_alerts(active_location)
+        except AlertFetchError:
+            active_alerts = None
+        return saved_alert_summary_service.get_saved_summary(
+            locations,
+            active_location=active_location,
+            active_alerts=active_alerts,
+        )
 
     if normalized_scope != "active":
         raise HTTPException(

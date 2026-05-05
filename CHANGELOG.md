@@ -2,6 +2,16 @@
 
 Molecast release notes will be tracked here.
 
+## 0.7.5 - 2026-05-05
+
+- Refined the saved-scope alert drilldown with grouping by affected saved location and compact filters for All, Warnings, Watches, Advisories, TEST, and NWS.
+- Kept the saved drilldown backed by `GET /api/alerts/summary?scope=saved` while preserving active-location-only alert banners and scope-selectable alert counters.
+- Fixed active alert banner auto-refresh reliability by making `/api/alerts/active` requests use `cache: "no-store"` with a 30-second abort timeout.
+- Hardened the dashboard active-alert polling loop so overlapping refreshes are controlled, queued manual refreshes run after the current fetch, and failures schedule the next poll instead of killing banner refresh.
+- Merged the active alert stream into the saved summary under the active saved location only, so active banner alerts also appear in the saved-scope drilldown without making banners all-saved.
+- Updated saved summary cache invalidation to include active alert identity, source, match type, priority, and timestamps.
+- Preserved TEST/NWS source identity, deduped shared alerts once, prevented blank/no-target test alerts from matching every saved location, and kept `test/alerts_test.json` clean.
+
 ## 0.7.4 - 2026-05-04
 
 - Added the combined frontend UI milestone for dashboard header/logo polish and saved alert details drilldown.

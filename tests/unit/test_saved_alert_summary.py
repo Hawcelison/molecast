@@ -3,6 +3,7 @@ from pathlib import Path
 
 from app.alerts.saved_summary import SavedAlertSummaryService
 from app.models.location import Location
+from app.schemas.alert import WeatherAlert
 from app.services.alert_service import AlertZoneFetchError
 
 
@@ -106,6 +107,49 @@ def _service(provider: FakeProvider, loader: FakeTestAlertLoader) -> SavedAlertS
     )
 
 
+def _active_alert(
+    alert_id: str,
+    *,
+    source: str = "nws",
+    event: str = "Special Weather Statement",
+    priority: int = 150,
+    match_type: str = "geometry",
+) -> WeatherAlert:
+    return WeatherAlert.model_validate(
+        {
+            "id": alert_id,
+            "source": source,
+            "event": event,
+            "severity": "Moderate",
+            "urgency": "Expected",
+            "certainty": "Observed",
+            "headline": f"{event} headline",
+            "description": f"{event} description",
+            "areaDesc": "Kalamazoo",
+            "affectedZones": [],
+            "effective": datetime(2026, 1, 1, tzinfo=UTC),
+            "expires": datetime(2099, 1, 1, tzinfo=UTC),
+            "geometry": None,
+            "geometry_source": None,
+            "raw_properties": {"id": alert_id, "source": source},
+            "match": {
+                "match_type": match_type,
+                "matched_value": "42.2012,-85.58",
+                "confidence": "high",
+            },
+            "color_hex": "#FFE4B5",
+            "icon": "info",
+            "sound_profile": "none",
+            "priority": priority,
+            "priority_score": priority,
+            "severity_rank": 3,
+            "urgency_rank": 4,
+            "certainty_rank": 5,
+            "nws_details": {},
+        }
+    )
+
+
 def test_saved_summary_aggregates_saved_locations_and_dedupes_shared_alert() -> None:
     locations = [
         _location(id=1, county_zone="MIC077", forecast_zone="MIZ072", zip_code="49002"),
@@ -143,6 +187,91 @@ def test_saved_summary_aggregates_saved_locations_and_dedupes_shared_alert() -> 
     assert summary.alert_refs[0].affected_location_count == 2
     assert [ref.id for ref in summary.alert_refs[0].affected_locations] == [1, 2]
     assert {ref.match_type for ref in summary.alert_refs[0].affected_locations} == {"zone"}
+
+
+def test_saved_summary_includes_active_stream_alert_under_active_location() -> None:
+    active_location = _location(id=1, county_zone="MIC077", forecast_zone="MIZ072")
+    other_location = _location(
+        id=2,
+        label="New York, NY",
+        city="New York",
+        state="NY",
+        county="New York",
+        county_fips="36061",
+        zip_code="10001",
+        county_zone="NYC061",
+        forecast_zone="NYZ072",
+    )
+    active_alert = _active_alert("active-only-special-weather-statement")
+
+    summary = _service(FakeProvider(), FakeTestAlertLoader()).get_saved_summary(
+        [active_location, other_location],
+        active_location=active_location,
+        active_alerts=[active_alert],
+    )
+
+    assert summary.total == 1
+    assert summary.alert_refs[0].id == active_alert.id
+    assert summary.alert_refs[0].source == "nws"
+    assert [ref.id for ref in summary.alert_refs[0].affected_locations] == [active_location.id]
+    assert summary.alert_refs[0].affected_locations[0].match_type == "geometry"
+
+
+def test_saved_summary_dedupes_active_stream_alert_already_in_saved_aggregation() -> None:
+    active_location = _location(id=1, county_zone="MIC077", forecast_zone="MIZ072")
+    other_location = _location(
+        id=2,
+        label="Battle Creek, MI",
+        city="Battle Creek",
+        county="Calhoun",
+        county_fips="26025",
+        zip_code="49015",
+        county_zone="MIC025",
+        forecast_zone="MIZ078",
+    )
+    shared = _feature(
+        "shared-special-weather-statement",
+        event="Special Weather Statement",
+        severity="Moderate",
+        affected_zones=["MIC077", "MIC025"],
+        geocode={"UGC": ["MIC077", "MIC025"]},
+    )
+    active_alert = _active_alert("shared-special-weather-statement")
+    provider = FakeProvider(zone_payloads={"MIC077": [shared], "MIC025": [shared]})
+
+    summary = _service(provider, FakeTestAlertLoader()).get_saved_summary(
+        [active_location, other_location],
+        active_location=active_location,
+        active_alerts=[active_alert],
+    )
+
+    assert summary.total == 1
+    assert summary.alert_refs[0].id == active_alert.id
+    assert [ref.id for ref in summary.alert_refs[0].affected_locations] == [1, 2]
+
+
+def test_saved_summary_active_no_target_test_alert_matches_active_location_only() -> None:
+    active_location = _location(id=1, zip_code="49002")
+    other_location = _location(id=2, zip_code="49015", county_zone="MIC025", forecast_zone="MIZ078")
+    blank_test_feature = _feature("blank-test-warning", event="TEST: Tornado Warning")
+    active_alert = _active_alert(
+        "blank-test-warning",
+        source="test",
+        event="TEST: Tornado Warning",
+        priority=1000,
+        match_type="county",
+    )
+
+    summary = _service(FakeProvider(), FakeTestAlertLoader([blank_test_feature])).get_saved_summary(
+        [active_location, other_location],
+        active_location=active_location,
+        active_alerts=[active_alert],
+    )
+
+    assert summary.total == 1
+    assert summary.alert_refs[0].source == "test"
+    assert [ref.id for ref in summary.alert_refs[0].affected_locations] == [active_location.id]
+    assert summary.affected_location_count == 1
 
 
 def test_saved_summary_counts_categories_and_selects_highest_across_locations() -> None:

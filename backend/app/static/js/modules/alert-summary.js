@@ -4,9 +4,18 @@
     saved: "All Saved Locations",
   };
   const DETAILS_PANEL_ID = "alert-summary-details-panel";
+  const FILTERS = [
+    ["all", "All"],
+    ["warning", "Warnings"],
+    ["watch", "Watches"],
+    ["advisory", "Advisories"],
+    ["test", "TEST"],
+    ["nws", "NWS"],
+  ];
 
   let currentScope = "active";
   let detailsOpen = false;
+  let detailsFilter = "all";
   let lastSummary = null;
   let initialized = false;
 
@@ -233,12 +242,37 @@
       return panel;
     }
 
-    const list = createElement("div", "alert-summary__details-list");
-    refs.forEach(function (alertRef) {
-      list.append(renderAlertRef(alertRef));
-    });
-    panel.append(list);
+    panel.append(renderFilterChips());
+    const groupedAlerts = buildGroupedAlerts(refs);
+    const filteredGroups = filterLocationGroups(groupedAlerts);
+    if (filteredGroups.length === 0) {
+      panel.append(createElement("p", "alert-summary__details-empty", "No alerts match this filter."));
+      return panel;
+    }
+    panel.append(renderLocationGroups(filteredGroups));
     return panel;
+  }
+
+  function renderFilterChips() {
+    const controls = createElement("div", "alert-summary__filter-chips");
+    controls.setAttribute("aria-label", "Saved alert details filters");
+    FILTERS.forEach(function ([value, label]) {
+      const button = createElement("button", "alert-summary__filter-chip", label);
+      button.type = "button";
+      button.dataset.filter = value;
+      button.setAttribute("aria-pressed", String(detailsFilter === value));
+      if (detailsFilter === value) {
+        button.classList.add("is-selected");
+      }
+      button.addEventListener("click", function () {
+        detailsFilter = value;
+        if (lastSummary) {
+          renderSummary(lastSummary);
+        }
+      });
+      controls.append(button);
+    });
+    return controls;
   }
 
   function renderPartialDetails(summary) {
@@ -257,8 +291,36 @@
     return warning;
   }
 
-  function renderAlertRef(alertRef) {
-    const item = createElement("article", "alert-summary__detail-alert");
+  function renderLocationGroups(groups) {
+    const list = createElement("div", "alert-summary__location-groups");
+    groups.forEach(function (group) {
+      list.append(renderLocationGroup(group));
+    });
+    return list;
+  }
+
+  function renderLocationGroup(group) {
+    const item = createElement("article", "alert-summary__location-group");
+    const header = createElement("div", "alert-summary__location-header");
+    const title = createElement("div", "alert-summary__location-title");
+    title.append(
+      createElement("strong", "", locationLabel(group.location)),
+      createElement("span", "alert-summary__location-detail", locationDetails(group.location) || "Saved location")
+    );
+    const count = group.alerts.length;
+    header.append(title, createElement("span", "alert-summary__location-count", `${count} ${count === 1 ? "alert" : "alerts"}`));
+
+    const alerts = createElement("div", "alert-summary__location-alerts");
+    group.alerts.forEach(function (entry) {
+      alerts.append(renderGroupedAlert(entry));
+    });
+    item.append(header, alerts);
+    return item;
+  }
+
+  function renderGroupedAlert(entry) {
+    const alertRef = entry.alert;
+    const item = createElement("div", "alert-summary__detail-alert");
     const color = validHex(alertRef?.color_hex) ? alertRef.color_hex : "#64748b";
     item.style.setProperty("--detail-alert-color", color);
 
@@ -270,10 +332,10 @@
     const title = createElement("div", "alert-summary__detail-title");
     const titleLine = createElement("div", "alert-summary__detail-title-line");
     titleLine.append(sourceBadge(alertRef?.source), createElement("strong", "", alertRef?.event || alertRef?.id || "Alert"));
-    title.append(titleLine, renderAlertMeta(alertRef));
+    title.append(titleLine, renderGroupedAlertMeta(alertRef, entry.location));
 
     header.append(marker, title);
-    item.append(header, renderAffectedLocations(alertRef));
+    item.append(header);
     return item;
   }
 
@@ -316,26 +378,113 @@
     return wrap;
   }
 
+  function buildGroupedAlerts(alertRefs) {
+    const groups = new Map();
+    alertRefs.forEach(function (alertRef) {
+      const locations = Array.isArray(alertRef?.affected_locations) ? alertRef.affected_locations : [];
+      locations.forEach(function (location) {
+        const key = String(location?.id ?? locationLabel(location));
+        if (!groups.has(key)) {
+          groups.set(key, {
+            location,
+            alerts: [],
+          });
+        }
+        groups.get(key).alerts.push({ alert: alertRef, location });
+      });
+    });
+    return Array.from(groups.values())
+      .map(function (group) {
+        return {
+          location: group.location,
+          alerts: group.alerts.sort(alertEntrySortKey),
+        };
+      })
+      .sort(locationGroupSortKey);
+  }
+
+  function filterLocationGroups(groups) {
+    return groups
+      .map(function (group) {
+        return {
+          location: group.location,
+          alerts: group.alerts.filter(function (entry) {
+            return matchesFilter(entry.alert);
+          }),
+        };
+      })
+      .filter(function (group) {
+        return group.alerts.length > 0;
+      });
+  }
+
+  function matchesFilter(alertRef) {
+    if (detailsFilter === "all") {
+      return true;
+    }
+    if (detailsFilter === "test") {
+      return isTestSource(alertRef?.source);
+    }
+    if (detailsFilter === "nws") {
+      return !isTestSource(alertRef?.source);
+    }
+    return categoryKey(alertRef?.event) === detailsFilter;
+  }
+
+  function renderGroupedAlertMeta(alertRef, location) {
+    const meta = createElement("div", "alert-summary__detail-meta");
+    meta.append(createElement("span", "", categoryLabel(alertRef?.event)));
+    if (location?.match_type) {
+      meta.append(createElement("span", "alert-summary__match-type", `Match: ${formatMatchType(location.match_type)}`));
+    }
+    if (isHighestAlert(alertRef)) {
+      meta.append(createElement("span", "alert-summary__highest-flag", "Highest"));
+    }
+    const priority = Number(alertRef?.priority_score ?? alertRef?.priority);
+    if (Number.isFinite(priority)) {
+      meta.append(createElement("span", "", `P${priority}`));
+    }
+    return meta;
+  }
+
   function sourceBadge(source) {
-    const normalized = String(source || "nws").toLowerCase();
-    const isTest = normalized === "test" || normalized === "molecast_test";
+    const isTest = isTestSource(source);
     const label = isTest ? "TEST" : "NWS";
     const badge = createElement("span", `alert-summary__source-badge alert-summary__source-badge--${isTest ? "test" : "nws"}`, label);
     return badge;
   }
 
+  function isTestSource(source) {
+    const normalized = String(source || "").toLowerCase();
+    return normalized === "test" || normalized === "molecast_test";
+  }
+
   function categoryLabel(event) {
-    const text = String(event || "").toLowerCase();
-    if (text.includes("warning")) {
+    const category = categoryKey(event);
+    if (category === "warning") {
       return "Warning";
     }
-    if (text.includes("watch")) {
+    if (category === "watch") {
       return "Watch";
     }
-    if (text.includes("advisory")) {
+    if (category === "advisory") {
       return "Advisory";
     }
     return "Other";
+  }
+
+  function categoryKey(event) {
+    const text = String(event || "").toLowerCase();
+    if (text.includes("warning")) {
+      return "warning";
+    }
+    if (text.includes("watch")) {
+      return "watch";
+    }
+    if (text.includes("advisory")) {
+      return "advisory";
+    }
+    return "other";
   }
 
   function locationLabel(location) {
@@ -363,6 +512,27 @@
 
   function isReadableText(value) {
     return typeof value === "string" && value.trim() && value.length < 220;
+  }
+
+  function isHighestAlert(alertRef) {
+    const highest = lastSummary?.highest_alert;
+    return Boolean(highest && alertRef && highest.id === alertRef.id && String(highest.source || "") === String(alertRef.source || ""));
+  }
+
+  function alertEntrySortKey(a, b) {
+    const priorityDiff = Number(b.alert?.priority_score ?? b.alert?.priority ?? 0) - Number(a.alert?.priority_score ?? a.alert?.priority ?? 0);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+    return String(a.alert?.event || a.alert?.id || "").localeCompare(String(b.alert?.event || b.alert?.id || ""));
+  }
+
+  function locationGroupSortKey(a, b) {
+    const alertCountDiff = b.alerts.length - a.alerts.length;
+    if (alertCountDiff !== 0) {
+      return alertCountDiff;
+    }
+    return locationLabel(a.location).localeCompare(locationLabel(b.location));
   }
 
   function validHex(value) {

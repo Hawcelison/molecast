@@ -120,8 +120,14 @@ class FakeSavedSummaryService:
     def __init__(self):
         self.calls = []
 
-    def get_saved_summary(self, locations):
-        self.calls.append([location.id for location in locations])
+    def get_saved_summary(self, locations, *, active_location=None, active_alerts=None):
+        self.calls.append(
+            {
+                "locations": [location.id for location in locations],
+                "active_location": active_location.id if active_location is not None else None,
+                "active_alerts": [alert.id for alert in active_alerts or []],
+            }
+        )
         return {
             "scope": "saved",
             "scope_label": "All Saved Locations",
@@ -291,8 +297,11 @@ def test_empty_active_alert_summary_has_zero_counts(monkeypatch) -> None:
 
 def test_saved_alert_summary_scope_uses_saved_summary_service(monkeypatch) -> None:
     location = _location()
+    active_alert = _weather_alert(id="active-alert", source="nws", event="Special Weather Statement")
     fake_service = FakeSavedSummaryService()
     monkeypatch.setattr(alerts_route.location_service, "list_locations", lambda db, settings: [location])
+    monkeypatch.setattr(alerts_route.location_service, "get_active_location", lambda db, settings: location)
+    monkeypatch.setattr(alerts_route, "active_alert_service", FakeSummaryActiveAlertService([active_alert]))
     monkeypatch.setattr(alerts_route, "saved_alert_summary_service", fake_service)
 
     response = AlertSummaryResponse.model_validate(alerts_route.get_alert_summary(scope="saved", db=None))
@@ -300,4 +309,10 @@ def test_saved_alert_summary_scope_uses_saved_summary_service(monkeypatch) -> No
     assert response.scope == "saved"
     assert response.scope_label == "All Saved Locations"
     assert response.saved_location_count == 1
-    assert fake_service.calls == [[location.id]]
+    assert fake_service.calls == [
+        {
+            "locations": [location.id],
+            "active_location": location.id,
+            "active_alerts": [active_alert.id],
+        }
+    ]

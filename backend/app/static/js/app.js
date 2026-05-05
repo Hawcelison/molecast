@@ -1,5 +1,8 @@
 (function () {
   let refreshTimer = null;
+  let activeRefreshInFlight = false;
+  let pendingRefresh = false;
+  let lastRefreshSeconds = null;
 
   function createElement(tagName, className, text) {
     const element = document.createElement(tagName);
@@ -69,16 +72,19 @@
       ? refreshSeconds
       : window.MolecastAlertsApi.DEFAULT_REFRESH_SECONDS;
 
+    lastRefreshSeconds = seconds;
     window.clearTimeout(refreshTimer);
-    refreshTimer = window.setTimeout(loadAlerts, seconds * 1000);
+    refreshTimer = window.setTimeout(function () {
+      refreshTimer = null;
+      loadAlerts();
+    }, seconds * 1000);
   }
 
-  function resetAlertViews(alertList, bannerContainer) {
+  function renderAlertFetchError(alertList, bannerContainer) {
     if (alertList) {
       renderEmptyState(alertList);
     }
     window.MolecastAlertBanners.reset(bannerContainer);
-    scheduleNextLoad(window.MolecastAlertsApi.DEFAULT_REFRESH_SECONDS);
   }
 
   async function loadAlerts() {
@@ -88,7 +94,14 @@
     if (!alertList && !bannerContainer && !summaryContainer) {
       return;
     }
+    if (activeRefreshInFlight) {
+      pendingRefresh = true;
+      return;
+    }
 
+    window.clearTimeout(refreshTimer);
+    refreshTimer = null;
+    activeRefreshInFlight = true;
     try {
       const result = await window.MolecastAlertsApi.fetchActiveAlerts();
       window.MolecastAlertBanners.render(bannerContainer, result.alerts);
@@ -107,7 +120,18 @@
       }));
       window.MolecastAlertSummary?.refresh();
       window.MOLECAST_ALERT_MAP?.renderAlerts([]);
-      resetAlertViews(alertList, bannerContainer);
+      renderAlertFetchError(alertList, bannerContainer);
+      scheduleNextLoad(lastRefreshSeconds || window.MolecastAlertsApi.DEFAULT_REFRESH_SECONDS);
+    } finally {
+      activeRefreshInFlight = false;
+      if (pendingRefresh) {
+        pendingRefresh = false;
+        window.clearTimeout(refreshTimer);
+        refreshTimer = window.setTimeout(function () {
+          refreshTimer = null;
+          loadAlerts();
+        }, 0);
+      }
     }
   }
 

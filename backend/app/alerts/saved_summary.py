@@ -54,11 +54,24 @@ class SavedAlertSummaryService:
         self._last_refreshed_at: datetime | None = None
         self.logger = get_logger()
 
-    def get_saved_summary(self, locations: list[Location]) -> AlertSummaryResponse:
+    def get_saved_summary(
+        self,
+        locations: list[Location],
+        *,
+        active_location: Location | None = None,
+        active_alerts: list[WeatherAlert] | None = None,
+    ) -> AlertSummaryResponse:
         now = now_utc()
         locations = _dedupe_locations(locations)
         test_alert_mtime = self.test_alert_loader.alert_file_mtime()
-        fingerprint = _saved_location_fingerprint(locations, test_alert_mtime)
+        active_alerts = active_alerts or []
+        active_location = _matching_location(locations, active_location)
+        fingerprint = _saved_location_fingerprint(
+            locations,
+            test_alert_mtime,
+            active_location=active_location,
+            active_alerts=active_alerts,
+        )
 
         if self._can_use_cache(fingerprint, now):
             return self._cached_summary or self._empty_summary(locations, now)
@@ -69,6 +82,8 @@ class SavedAlertSummaryService:
             features_by_source,
             zone_geometry_service=self.zone_geometry_service,
         )
+        if active_location is not None and active_alerts:
+            _merge_active_location_alerts(aggregated, active_alerts, active_location)
         alerts = sort_alerts_by_priority([item.alert for item in aggregated])
         aggregate_by_alert_id = {(item.alert.source, item.alert.id): item for item in aggregated}
         alert_refs = [
@@ -212,6 +227,37 @@ def _aggregate_alerts(
             _merge_affected_locations(existing.affected_locations, affected_locations)
 
     return [aggregated_by_key[key] for key in order]
+
+
+def _merge_active_location_alerts(
+    aggregated: list[_AggregatedAlert],
+    active_alerts: list[WeatherAlert],
+    active_location: Location,
+) -> None:
+    aggregated_by_key = {_weather_alert_key(item.alert): item for item in aggregated}
+    for alert in active_alerts:
+        key = _weather_alert_key(alert)
+        affected_location = _affected_location_ref(
+            active_location,
+            AlertMatch(
+                match_type=alert.match.match_type,
+                matched_value=alert.match.matched_value,
+                confidence=alert.match.confidence,
+            ),
+        )
+        existing = aggregated_by_key.get(key)
+        if existing is None:
+            item = _AggregatedAlert(
+                key=key,
+                alert=alert,
+                affected_locations=[affected_location],
+            )
+            aggregated.append(item)
+            aggregated_by_key[key] = item
+            continue
+
+        existing.alert = choose_preferred_alert(existing.alert, alert)
+        _merge_affected_locations(existing.affected_locations, [affected_location])
 
 
 def match_saved_alert_to_location(
@@ -433,6 +479,10 @@ def _stable_source_alert_key(normalized_alert: MolecastAlert) -> str:
     return f"{normalized_alert.source}:{normalized_alert.content_hash}"
 
 
+def _weather_alert_key(alert: WeatherAlert) -> str:
+    return f"{alert.source}:{alert.id}"
+
+
 def _affected_location_ref(location: Location, match: AlertMatch) -> dict[str, Any]:
     return {
         "id": location.id,
@@ -501,7 +551,22 @@ def _dedupe_locations(locations: list[Location]) -> list[Location]:
     return deduped
 
 
-def _saved_location_fingerprint(locations: list[Location], test_alert_mtime: float | None) -> str:
+def _matching_location(locations: list[Location], candidate: Location | None) -> Location | None:
+    if candidate is None:
+        return None
+    for location in locations:
+        if location.id == candidate.id:
+            return location
+    return None
+
+
+def _saved_location_fingerprint(
+    locations: list[Location],
+    test_alert_mtime: float | None,
+    *,
+    active_location: Location | None = None,
+    active_alerts: list[WeatherAlert] | None = None,
+) -> str:
     data = {
         "locations": [
             {
@@ -518,6 +583,18 @@ def _saved_location_fingerprint(locations: list[Location], test_alert_mtime: flo
             for location in sorted(locations, key=lambda item: item.id)
         ],
         "test_alert_mtime": test_alert_mtime,
+        "active_location_id": active_location.id if active_location is not None else None,
+        "active_alerts": [
+            {
+                "id": alert.id,
+                "source": alert.source,
+                "priority": alert.priority,
+                "match_type": alert.match.match_type,
+                "effective": _datetime_fingerprint(alert.effective),
+                "expires": _datetime_fingerprint(alert.expires),
+            }
+            for alert in sorted(active_alerts or [], key=lambda item: (item.source, item.id))
+        ],
     }
     encoded = json.dumps(data, sort_keys=True, default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
