@@ -2,6 +2,13 @@
 
 Molecast release notes will be tracked here.
 
+## 0.8.1 - 2026-05-05
+
+- Feature: compact card-based test alert editor
+- Improved mobile usability and inline editing for test scenarios
+- Added search/filter and enabled-only filtering for test alerts
+- Preserved TEST alert behavior and advanced editing options
+
 ## 0.8.0 - 2026-05-05
 
 - Feature: production/test mode separation with public safety controls
