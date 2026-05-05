@@ -258,22 +258,26 @@ class ActiveAlertService:
         return f"{location.id}:{location.latitude}:{location.longitude}"
 
     def _load_active_alerts(self, location: Location) -> list[WeatherAlert]:
-        test_payload = {
-            "features": self.test_alert_loader.load_enabled_alert_features(location),
-        }
-        test_alerts = parse_nws_alerts(
-            test_payload,
-            location,
-            source="test",
-            zone_geometry_service=self.zone_geometry_service,
-        )
+        test_alerts: list[WeatherAlert] = []
+        if _test_alert_loader_enabled(self.test_alert_loader):
+            test_payload = {
+                "features": self.test_alert_loader.load_enabled_alert_features(location),
+            }
+            test_alerts = parse_nws_alerts(
+                test_payload,
+                location,
+                source="test",
+                zone_geometry_service=self.zone_geometry_service,
+            )
 
         try:
             live_payload = self.provider.fetch_active_alerts(location)
         except AlertFetchError:
+            fallback_description = "local test alerts only" if test_alerts else "no alerts"
             self.logger.warning(
-                "Unable to fetch live NWS alerts; returning local test alerts only. "
+                "Unable to fetch live NWS alerts; returning %s. "
                 "test_alert_count=%s",
+                fallback_description,
                 len(test_alerts),
             )
             live_alerts = []
@@ -514,6 +518,11 @@ def is_alert_expired(expires: Any, now: datetime | None = None) -> bool:
     current_time = parse_alert_time_utc(now) or now_utc()
 
     return current_time > expires_at
+
+
+def _test_alert_loader_enabled(test_alert_loader: TestAlertLoader) -> bool:
+    loader_settings = getattr(test_alert_loader, "settings", None)
+    return bool(getattr(loader_settings, "test_alerts_enabled", True))
 
 
 active_alert_service = ActiveAlertService(

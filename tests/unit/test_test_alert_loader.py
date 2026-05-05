@@ -2,10 +2,13 @@ import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pytest
+
 from app.alerts import test_alert_loader as loader_module
 from app.alerts.presentation import build_alert_presentation
 from app.alerts.test_targets import normalize_test_alert_targets
 from app.api.routes import test_alerts as test_alerts_route
+from app.config import Settings
 from app.models.location import Location
 from app.services import alert_service
 from app.services.alert_service import parse_nws_alerts
@@ -81,6 +84,56 @@ def _write_payload(alert_file, *alerts) -> str:
     text = json.dumps(payload, indent=2) + "\n"
     alert_file.write_text(text, encoding="utf-8")
     return text
+
+
+def test_default_dev_settings_keep_test_alerts_enabled(monkeypatch) -> None:
+    monkeypatch.delenv("MOLECAST_PUBLIC_MODE", raising=False)
+    monkeypatch.delenv("MOLECAST_ENABLE_TEST_ALERTS", raising=False)
+
+    app_settings = Settings(_env_file=None)
+
+    assert app_settings.molecast_public_mode is False
+    assert app_settings.molecast_enable_test_alerts is True
+    assert app_settings.test_alerts_enabled is True
+    assert app_settings.test_alerts_disabled_reason is None
+
+
+def test_public_mode_blocks_test_alert_mutation_endpoints(monkeypatch) -> None:
+    monkeypatch.setattr(test_alerts_route.settings, "molecast_public_mode", True)
+    monkeypatch.setattr(test_alerts_route.settings, "molecast_enable_test_alerts", True)
+
+    def fail_if_write(*args, **kwargs):
+        raise AssertionError("blocked test-alert save should not write the fixture")
+
+    monkeypatch.setattr(test_alerts_route, "_write_payload", fail_if_write)
+
+    with pytest.raises(test_alerts_route.HTTPException) as save_error:
+        test_alerts_route.save_test_alerts({"alerts": []}, db=object())
+    with pytest.raises(test_alerts_route.HTTPException) as refresh_error:
+        test_alerts_route.refresh_test_alerts(db=object())
+
+    assert save_error.value.status_code == 403
+    assert save_error.value.detail["error"] == "test_alerts_disabled"
+    assert save_error.value.detail["public_mode"] is True
+    assert refresh_error.value.status_code == 403
+
+
+def test_disabled_test_alert_status_reports_disabled_without_reading_fixture(monkeypatch) -> None:
+    monkeypatch.setattr(test_alerts_route.settings, "molecast_public_mode", False)
+    monkeypatch.setattr(test_alerts_route.settings, "molecast_enable_test_alerts", False)
+
+    def fail_if_read(*args, **kwargs):
+        raise AssertionError("disabled test-alert status should not read the fixture")
+
+    monkeypatch.setattr(test_alerts_route, "_read_payload", fail_if_read)
+
+    response = test_alerts_route.get_test_alert_status(refresh=True, db=object())
+
+    assert response["enabled"] is False
+    assert response["configured"] is False
+    assert response["disabled_reason"] == "test_alerts_disabled"
+    assert response["test_total"] == 0
+    assert response["test_active"] == 0
 
 
 def test_relative_time_creates_active_test_alert_timestamps(tmp_path, monkeypatch) -> None:
@@ -613,6 +666,35 @@ def test_unknown_custom_event_saves_and_uses_backend_fallback_presentation(tmp_p
     assert alert.sound_profile == "default"
     assert alert.priority == 300
     assert presentation.title == "CUSTOM NWS STYLE TEST EVENT"
+
+
+def test_enabled_test_alerts_keep_test_source_and_label(tmp_path, monkeypatch) -> None:
+    current_time = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(loader_module, "now_utc", lambda: current_time)
+    monkeypatch.setattr(alert_service, "now_utc", lambda: current_time)
+    alert_file = tmp_path / "alerts_test.json"
+    _write_payload(
+        alert_file,
+        _alert(
+            source="nws",
+            event="TEST: Tornado Warning",
+            relative_time={
+                "effective_minutes_from_now": -5,
+                "expires_minutes_from_now": 90,
+            },
+        ),
+    )
+    app_settings = SimpleNamespace(test_alerts_file=alert_file, test_alerts_enabled=True)
+
+    features = loader_module.TestAlertLoader(app_settings).load_enabled_alert_features(_location())
+    alert = parse_nws_alerts({"features": features}, _location(), source="test")[0]
+    presentation = build_alert_presentation(alert, _location())
+
+    assert features[0]["source"] == "test"
+    assert features[0]["properties"]["source"] == "test"
+    assert alert.source == "test"
+    assert alert.event == "TEST: Tornado Warning"
+    assert presentation.title == "TEST: TORNADO WARNING"
 
 
 def test_editor_validation_accepts_relative_time_without_absolute_timestamps() -> None:

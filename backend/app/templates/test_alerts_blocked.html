@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+<main class="test-alert-editor">
+  <header class="editor-header">
+    <div>
+      <p class="editor-warning">Local Test Alert Editor unavailable</p>
+      <h1>Test alert tooling is disabled</h1>
+      <p class="editor-note">
+        This Molecast runtime is not accepting local test-alert editor access.
+      </p>
+    </div>
+    <a class="editor-link" href="/">Back to Molecast</a>
+  </header>
+
+  <section class="editor-status" aria-live="polite">
+    <div>
+      <span class="status-label">Public Mode</span>
+      <strong>{{ "enabled" if public_mode else "disabled" }}</strong>
+    </div>
+    <div>
+      <span class="status-label">Test Alerts</span>
+      <strong>{{ "configured" if test_alerts_configured else "disabled" }}</strong>
+    </div>
+    <div>
+      <span class="status-label">Reason</span>
+      <strong>{{ disabled_reason or "unavailable" }}</strong>
+    </div>
+  </section>
+</main>
+{% endblock %}

@@ -180,13 +180,16 @@ class FakeNwsAlertProvider(NwsAlertProvider):
 
 
 class FakeTestAlertLoader:
-    def __init__(self, features: list[dict] | None = None) -> None:
+    def __init__(self, features: list[dict] | None = None, *, test_alerts_enabled: bool = True) -> None:
         self.features = features or []
+        self.settings = SimpleNamespace(test_alerts_enabled=test_alerts_enabled)
+        self.calls = 0
 
     def alert_file_mtime(self) -> float:
         return 1.0
 
     def load_enabled_alert_features(self, location: Location) -> list[dict]:
+        self.calls += 1
         return self.features
 
 
@@ -242,6 +245,21 @@ def test_nws_failure_still_returns_test_alerts() -> None:
 
     assert [alert.id for alert in alerts] == ["test-alert"]
     assert alerts[0].source == "test"
+
+
+def test_disabled_test_alerts_are_excluded_from_active_stream() -> None:
+    test_loader = FakeTestAlertLoader([_feature("test-alert")], test_alerts_enabled=False)
+    service = ActiveAlertService(
+        provider=FakeNwsAlertProvider(point_payload=_payload(_feature("nws-alert"))),
+        test_alert_loader=test_loader,
+        refresh_interval_seconds=60,
+    )
+
+    alerts, _refreshed_at = service.refresh_active_alerts(_location())
+
+    assert [alert.id for alert in alerts] == ["nws-alert"]
+    assert {alert.source for alert in alerts} == {"nws"}
+    assert test_loader.calls == 0
 
 
 def test_merged_alert_dedupe_prefers_higher_priority() -> None:

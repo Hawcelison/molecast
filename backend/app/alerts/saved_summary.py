@@ -21,6 +21,7 @@ from app.services.alert_service import (
     AlertZoneFetchError,
     NwsAlertProvider,
     _weather_alert_data,
+    _test_alert_loader_enabled,
     choose_preferred_alert,
     stable_alert_feature_id,
 )
@@ -63,8 +64,10 @@ class SavedAlertSummaryService:
     ) -> AlertSummaryResponse:
         now = now_utc()
         locations = _dedupe_locations(locations)
-        test_alert_mtime = self.test_alert_loader.alert_file_mtime()
+        test_alert_mtime = self.test_alert_loader.alert_file_mtime() if self._test_alerts_enabled() else None
         active_alerts = active_alerts or []
+        if not self._test_alerts_enabled():
+            active_alerts = [alert for alert in active_alerts if alert.source != "test"]
         active_location = _matching_location(locations, active_location)
         fingerprint = _saved_location_fingerprint(
             locations,
@@ -167,7 +170,7 @@ class SavedAlertSummaryService:
                 continue
             _extend_unique_features(features_by_source["nws"], seen_nws_feature_ids, payload)
 
-        if locations:
+        if locations and self._test_alerts_enabled():
             try:
                 test_features = self.test_alert_loader.load_enabled_alert_features(
                     locations[0],
@@ -178,6 +181,9 @@ class SavedAlertSummaryService:
             features_by_source["test"] = test_features
 
         return features_by_source, errors
+
+    def _test_alerts_enabled(self) -> bool:
+        return _test_alert_loader_enabled(self.test_alert_loader)
 
 
 def _aggregate_alerts(

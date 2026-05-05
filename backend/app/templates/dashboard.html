@@ -149,7 +149,9 @@
   </section>
   <section id="radar"></section>
   <footer class="app-footer">
+    {% if frontend_config.testAlerts.enabled %}
     <a href="/test-alerts">Test Alert Editor</a>
+    {% endif %}
   </footer>
 </main>
 {% endblock %}

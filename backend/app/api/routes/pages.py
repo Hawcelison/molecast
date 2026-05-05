@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -41,6 +41,18 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/test-alerts")
 def test_alert_editor(request: Request, db: Session = Depends(get_db)):
+    if not settings.test_alerts_enabled:
+        return templates.TemplateResponse(
+            "test_alerts_blocked.html",
+            {
+                "request": request,
+                "public_mode": settings.molecast_public_mode,
+                "test_alerts_configured": settings.molecast_enable_test_alerts,
+                "disabled_reason": settings.test_alerts_disabled_reason,
+            },
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+
     active_location = location_service.get_active_location(db, settings)
     frontend_config = {
         "mapbox": settings.frontend_config.get("mapbox", {}),

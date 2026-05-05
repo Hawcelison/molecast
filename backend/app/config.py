@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -37,6 +38,14 @@ class Settings(BaseSettings):
     data_dir: Path = Field(
         default=Path(constants.DATA_DIR),
         validation_alias="DATA_DIR",
+    )
+    molecast_public_mode: bool = Field(
+        default=constants.MOLECAST_PUBLIC_MODE,
+        validation_alias="MOLECAST_PUBLIC_MODE",
+    )
+    molecast_enable_test_alerts: bool = Field(
+        default=constants.MOLECAST_ENABLE_TEST_ALERTS,
+        validation_alias="MOLECAST_ENABLE_TEST_ALERTS",
     )
     default_location_city: str = Field(
         default=constants.DEFAULT_LOCATION_CITY,
@@ -213,7 +222,19 @@ class Settings(BaseSettings):
         }
 
     @property
-    def frontend_config(self) -> dict[str, dict[str, str | bool]]:
+    def test_alerts_enabled(self) -> bool:
+        return self.molecast_enable_test_alerts and not self.molecast_public_mode
+
+    @property
+    def test_alerts_disabled_reason(self) -> str | None:
+        if self.molecast_public_mode:
+            return "public_mode"
+        if not self.molecast_enable_test_alerts:
+            return "test_alerts_disabled"
+        return None
+
+    @property
+    def frontend_config(self) -> dict[str, dict[str, Any]]:
         return {
             "mapbox": {
                 "enabled": bool(self.mapbox_token),
@@ -231,6 +252,12 @@ class Settings(BaseSettings):
                 "lineColor": self.county_boundaries_line_color,
                 "lineOpacity": self.county_boundaries_line_opacity,
                 "lineWidth": self.county_boundaries_line_width,
+            },
+            "testAlerts": {
+                "enabled": self.test_alerts_enabled,
+                "configured": self.molecast_enable_test_alerts,
+                "publicMode": self.molecast_public_mode,
+                "disabledReason": self.test_alerts_disabled_reason,
             },
         }
 

@@ -21,6 +21,12 @@ class TestAlertLoader:
         *,
         include_location_area_fallback: bool = True,
     ) -> list[dict[str, Any]]:
+        if not getattr(self.settings, "test_alerts_enabled", True):
+            self.logger.info(
+                "Test alerts disabled for this runtime; skipping local test alert file."
+            )
+            return []
+
         alert_file = self._resolve_alert_file()
         if alert_file is None:
             self.logger.warning(
@@ -102,6 +108,9 @@ class TestAlertLoader:
         return None
 
     def alert_file_mtime(self) -> float | None:
+        if not getattr(self.settings, "test_alerts_enabled", True):
+            return None
+
         alert_file = self._resolve_alert_file()
         if alert_file is None:
             return None

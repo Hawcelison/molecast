@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 from app.alerts.saved_summary import SavedAlertSummaryService
 from app.models.location import Location
@@ -86,10 +87,11 @@ class FakeProvider:
 
 
 class FakeTestAlertLoader:
-    def __init__(self, features=None) -> None:
+    def __init__(self, features=None, *, test_alerts_enabled: bool = True) -> None:
         self.features = features or []
         self.calls = []
         self.mtime = 123.0
+        self.settings = SimpleNamespace(test_alerts_enabled=test_alerts_enabled)
 
     def alert_file_mtime(self):
         return self.mtime
@@ -314,6 +316,22 @@ def test_saved_summary_preserves_test_source_and_matches_zip_code_parameter() ->
     assert summary.highest_alert.source == "test"
     assert summary.alert_refs[0].source == "test"
     assert summary.alert_refs[0].affected_locations[0].match_type == "zip_code"
+
+
+def test_disabled_test_alerts_are_excluded_from_saved_summary() -> None:
+    location = _location(zip_code="49002")
+    test_feature = _feature(
+        "disabled-test-warning",
+        event="TEST: Tornado Warning",
+        parameters={"zipCode": ["49002"]},
+    )
+    loader = FakeTestAlertLoader([test_feature], test_alerts_enabled=False)
+
+    summary = _service(FakeProvider(), loader).get_saved_summary([location])
+
+    assert summary.total == 0
+    assert summary.alert_refs == []
+    assert loader.calls == []
 
 
 def test_saved_summary_counts_zip_targeted_test_alert_for_saved_zip() -> None:

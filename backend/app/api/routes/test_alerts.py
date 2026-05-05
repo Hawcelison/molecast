@@ -28,6 +28,38 @@ CERTAINTY_VALUES = {"Observed", "Likely", "Possible", "Unlikely", "Unknown"}
 VALIDATION_STATUS = status.HTTP_400_BAD_REQUEST
 
 
+def _test_alert_mode() -> dict[str, Any]:
+    return {
+        "enabled": settings.test_alerts_enabled,
+        "configured": settings.molecast_enable_test_alerts,
+        "public_mode": settings.molecast_public_mode,
+        "disabled_reason": settings.test_alerts_disabled_reason,
+    }
+
+
+def _blocked_test_alert_detail(operation: str) -> dict[str, Any]:
+    mode = _test_alert_mode()
+    reason = mode["disabled_reason"] or "test_alerts_unavailable"
+    return {
+        "error": "test_alerts_disabled",
+        "operation": operation,
+        "message": "Local test-alert tooling is disabled for this Molecast runtime.",
+        "enabled": mode["enabled"],
+        "public_mode": mode["public_mode"],
+        "configured": mode["configured"],
+        "disabled_reason": reason,
+    }
+
+
+def _require_test_alert_tooling_enabled(operation: str) -> None:
+    if settings.test_alerts_enabled:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=_blocked_test_alert_detail(operation),
+    )
+
+
 def _validation_error(detail: str) -> HTTPException:
     return HTTPException(status_code=VALIDATION_STATUS, detail=detail)
 
@@ -341,6 +373,7 @@ def _write_payload(alert_file: Path, payload: dict[str, Any]) -> None:
 
 @router.get("")
 def get_test_alerts():
+    _require_test_alert_tooling_enabled("read")
     alert_file = _resolve_test_alert_file()
     logger.debug("Reading test alert editor payload: file=%s", alert_file)
     payload = _read_payload(alert_file)
@@ -357,6 +390,25 @@ def get_test_alerts():
 
 @router.get("/status")
 def get_test_alert_status(refresh: bool = True, db: Session = Depends(get_db)):
+    mode = _test_alert_mode()
+    if not mode["enabled"]:
+        return {
+            **mode,
+            "test_file": None,
+            "test_total": 0,
+            "test_enabled": 0,
+            "test_active": 0,
+            "nws_active": 0,
+            "total_active": 0,
+            "last_loaded": now_utc(),
+            "last_saved": None,
+            "active_refreshed_at": None,
+            "sources": {
+                "test": 0,
+                "nws": 0,
+            },
+        }
+
     alert_file = _resolve_test_alert_file()
     payload = _read_payload(alert_file)
     alerts = payload.get("alerts", [])
@@ -370,6 +422,7 @@ def get_test_alert_status(refresh: bool = True, db: Session = Depends(get_db)):
     nws_active = source_counts["nws"]
 
     return {
+        **mode,
         "test_file": str(alert_file),
         "test_total": len(alerts),
         "test_enabled": sum(1 for alert in alerts if isinstance(alert, dict) and alert.get("enabled") is True),
@@ -388,6 +441,7 @@ def get_test_alert_status(refresh: bool = True, db: Session = Depends(get_db)):
 
 @router.put("")
 def save_test_alerts(payload: dict[str, Any], db: Session = Depends(get_db)):
+    _require_test_alert_tooling_enabled("save")
     alert_file = _resolve_test_alert_file()
     validated_payload = _validate_test_alert_payload(payload)
     alert_count = len(validated_payload["alerts"])
@@ -422,6 +476,7 @@ def save_test_alerts(payload: dict[str, Any], db: Session = Depends(get_db)):
 
 @router.post("/refresh")
 def refresh_test_alerts(db: Session = Depends(get_db)):
+    _require_test_alert_tooling_enabled("refresh")
     return _refresh_active_alerts(db)
 
 
