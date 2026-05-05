@@ -2,6 +2,14 @@
 
 Molecast release notes will be tracked here.
 
+## 0.8.2 - 2026-05-05
+
+- Feature: configurable radar auto-refresh
+- Added lightweight radar provider abstraction groundwork
+- Added radar refresh persistence and debug hooks
+- Improved radar refresh safety with non-overlapping refresh protection
+- Added stale-frame detection support for future provider work
+
 ## 0.8.1 - 2026-05-05
 
 - Feature: compact card-based test alert editor
