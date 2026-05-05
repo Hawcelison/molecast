@@ -148,6 +148,22 @@ class Settings(BaseSettings):
         default=constants.RADAR_OPACITY,
         validation_alias="RADAR_OPACITY",
     )
+    radar_auto_refresh_enabled: bool = Field(
+        default=constants.RADAR_AUTO_REFRESH_ENABLED,
+        validation_alias="RADAR_AUTO_REFRESH_ENABLED",
+    )
+    radar_auto_refresh_seconds: int = Field(
+        default=constants.RADAR_AUTO_REFRESH_SECONDS,
+        validation_alias="RADAR_AUTO_REFRESH_SECONDS",
+    )
+    radar_debug: bool = Field(
+        default=constants.RADAR_DEBUG,
+        validation_alias="RADAR_DEBUG",
+    )
+    radar_stale_after_seconds: int = Field(
+        default=constants.RADAR_STALE_AFTER_SECONDS,
+        validation_alias="RADAR_STALE_AFTER_SECONDS",
+    )
     county_boundaries_geojson_url: str = Field(
         default=constants.COUNTY_BOUNDARIES_GEOJSON_URL,
         validation_alias="COUNTY_BOUNDARIES_GEOJSON_URL",
@@ -242,9 +258,14 @@ class Settings(BaseSettings):
             },
             "radar": {
                 "enabled": True,
+                "provider": "rainviewer",
                 "apiUrl": self.rainviewer_api_url,
                 "frameIntervalMs": self.radar_frame_interval_ms,
                 "opacity": self.radar_opacity,
+                "autoRefreshEnabled": self.radar_auto_refresh_enabled,
+                "autoRefreshSeconds": self.radar_auto_refresh_seconds,
+                "debug": self.radar_debug,
+                "staleAfterSeconds": self.radar_stale_after_seconds,
             },
             "countyBoundaries": {
                 "enabled": True,

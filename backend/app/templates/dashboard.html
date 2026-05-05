@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="/static/js/modules/settings-store.js?v=alert-summary-scope-20260504" defer></script>
+<script src="/static/js/modules/settings-store.js?v=radar-refresh-20260505" defer></script>
 <script src="/static/js/modules/alerts-api.js?v=active-alert-refresh-20260504" defer></script>
 <script src="/static/js/modules/alert-icons.js?v=alert-ui-20260501b" defer></script>
 <script src="/static/js/modules/alert-audio.js?v=alert-ui-20260501b" defer></script>
@@ -32,6 +32,10 @@
         <p id="location-metadata-status" class="active-location-bar__status">NWS metadata: checking</p>
       </div>
       <div class="active-location-bar__actions" aria-label="Location actions">
+        <label class="radar-refresh-toggle">
+          <input id="radar-auto-refresh-toggle" type="checkbox" checked>
+          <span>Radar auto-refresh</span>
+        </label>
         <button
           id="location-editor-toggle"
           class="location-panel__button location-panel__button--primary"

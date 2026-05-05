@@ -4,6 +4,7 @@
     alertAudioEnabled: false,
     testAudioEnabled: false,
     alertCounterScope: "active",
+    radarAutoRefreshEnabled: true,
     flashingDisabled: true,
     silencedAlertIds: [],
     acknowledgedAlertIds: [],
@@ -33,6 +34,9 @@
       alertAudioEnabled: Boolean(settings.alertAudioEnabled),
       testAudioEnabled: Boolean(settings.testAudioEnabled),
       alertCounterScope: normalizeAlertCounterScope(settings.alertCounterScope),
+      radarAutoRefreshEnabled: typeof settings.radarAutoRefreshEnabled === "boolean"
+        ? settings.radarAutoRefreshEnabled
+        : DEFAULT_SETTINGS.radarAutoRefreshEnabled,
       flashingDisabled: true,
       silencedAlertIds: normalizeIdArray(settings.silencedAlertIds),
       acknowledgedAlertIds: normalizeIdArray(settings.acknowledgedAlertIds),
@@ -84,6 +88,10 @@
 
   function setAlertCounterScope(scope) {
     return updateSettings({ alertCounterScope: normalizeAlertCounterScope(scope) });
+  }
+
+  function setRadarAutoRefreshEnabled(enabled) {
+    return updateSettings({ radarAutoRefreshEnabled: Boolean(enabled) });
   }
 
   function setFlashingDisabled(_disabled) {
@@ -182,6 +190,7 @@
     setAlertAudioEnabled,
     setAlertCounterScope,
     setFlashingDisabled,
+    setRadarAutoRefreshEnabled,
     setTestAudioEnabled,
     silenceAlert,
     syncReadAlertIds,
