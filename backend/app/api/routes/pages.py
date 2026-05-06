@@ -39,6 +39,18 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/mockups/codex-ui-1")
+def codex_ui_1_mockup(request: Request):
+    return templates.TemplateResponse(
+        "mockups/codex_ui_1.html",
+        {
+            "request": request,
+            "public_mode": settings.molecast_public_mode,
+            "test_alerts_enabled": settings.test_alerts_enabled,
+        },
+    )
+
+
 @router.get("/test-alerts")
 def test_alert_editor(request: Request, db: Session = Depends(get_db)):
     if not settings.test_alerts_enabled:

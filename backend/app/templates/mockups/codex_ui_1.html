@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Codex UI: 1 - Molecast Mockup</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/static/css/codex-ui-1.css?v=20260506">
+  </head>
+  <body class="codex-ui-1">
+    <div class="prototype-strip" role="note">
+      <span>Design prototype</span>
+      <strong>Codex UI: 1</strong>
+      <a href="/">Back to Main Dashboard</a>
+    </div>
+
+    <div class="app-shell">
+      <aside class="global-nav" aria-label="Prototype navigation">
+        <a class="global-nav__brand" href="/" aria-label="Molecast main dashboard">
+          <img src="/static/img/molecast-logo-header.png" alt="Molecast">
+        </a>
+        <nav class="global-nav__links" aria-label="Dashboard areas">
+          <a class="global-nav__link is-active" href="#overview">Overview</a>
+          <a class="global-nav__link" href="#map-focus">Map</a>
+          <a class="global-nav__link" href="#locations">Locations</a>
+          <a class="global-nav__link" href="#alerts">Alerts</a>
+          <a class="global-nav__link" href="#tools">Tools</a>
+        </nav>
+        <p class="global-nav__mode">{{ "Public mode" if public_mode else "Local mode" }}</p>
+      </aside>
+
+      <main class="workspace" id="overview">
+        <header class="workspace-header">
+          <div>
+            <p class="eyebrow">Molecast Weather Operations</p>
+            <h1>Codex UI: 1</h1>
+          </div>
+          <a class="back-link" href="/">Back to Main Dashboard</a>
+        </header>
+
+        <section class="active-location-hero" aria-labelledby="active-location-heading">
+          <div class="active-location-hero__main">
+            <p class="eyebrow">Active Location</p>
+            <h2 id="active-location-heading">Portage, MI 49002</h2>
+            <p>Kalamazoo County - NWS Grand Rapids - Radar and alerts centered on the saved location.</p>
+          </div>
+          <div class="active-location-hero__actions" aria-label="Location actions">
+            <button type="button">Edit Location</button>
+            <button type="button">Saved Locations</button>
+          </div>
+        </section>
+
+        <section class="alert-priority" id="alerts" aria-label="Alert priority">
+          <article class="alert-priority__item alert-priority__item--warning">
+            <strong>Severe Thunderstorm Warning</strong>
+            <span>Kalamazoo County - Expires 5:45 PM</span>
+          </article>
+          <article class="alert-priority__item alert-priority__item--watch">
+            <strong>Tornado Watch</strong>
+            <span>Saved location group - Until 9:00 PM</span>
+          </article>
+        </section>
+
+        <section class="dashboard-grid">
+          <section class="map-focus" id="map-focus" aria-labelledby="map-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Radar and Alert Map</p>
+                <h2 id="map-heading">Primary Decision Surface</h2>
+              </div>
+              <details class="compact-controls">
+                <summary>Layers</summary>
+                <label><input type="checkbox" checked> Radar</label>
+                <label><input type="checkbox" checked> Alert polygons</label>
+                <label><input type="checkbox"> County boundaries</label>
+              </details>
+            </div>
+            <div class="map-canvas" role="img" aria-label="Prototype radar map centered on Portage, Michigan">
+              <div class="radar-sweep radar-sweep--green"></div>
+              <div class="radar-sweep radar-sweep--yellow"></div>
+              <div class="radar-sweep radar-sweep--red"></div>
+              <div class="alert-polygon"></div>
+              <div class="map-pin">
+                <span></span>
+                Portage
+              </div>
+              <div class="map-scale">10 mi</div>
+            </div>
+            <div class="map-toolbar" aria-label="Map quick controls">
+              <button type="button">Radar</button>
+              <button type="button">Alerts</button>
+              <button type="button">Recenter</button>
+              <button type="button">Refresh</button>
+            </div>
+          </section>
+
+          <aside class="side-stack" aria-label="Dashboard supporting information">
+            <section class="summary-card" aria-labelledby="summary-heading">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Alert Summary</p>
+                  <h2 id="summary-heading">2 Active Alerts</h2>
+                </div>
+                <span class="status-pill status-pill--danger">Highest: Warning</span>
+              </div>
+              <dl class="metric-list">
+                <div>
+                  <dt>Active location</dt>
+                  <dd>1 warning</dd>
+                </div>
+                <div>
+                  <dt>Saved locations</dt>
+                  <dd>1 watch</dd>
+                </div>
+                <div>
+                  <dt>Radar age</dt>
+                  <dd>4 min</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section class="summary-card" id="locations" aria-labelledby="saved-heading">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Saved Locations</p>
+                  <h2 id="saved-heading">Monitor List</h2>
+                </div>
+                <button type="button">Manage</button>
+              </div>
+              <ul class="location-list">
+                <li>
+                  <strong>Portage Home</strong>
+                  <span>Active - Kalamazoo County</span>
+                </li>
+                <li>
+                  <strong>Battle Creek</strong>
+                  <span>Watch - Calhoun County</span>
+                </li>
+                <li>
+                  <strong>South Haven</strong>
+                  <span>No active alert</span>
+                </li>
+              </ul>
+            </section>
+
+            <section class="summary-card tools-card" id="tools" aria-labelledby="tools-heading">
+              <div>
+                <p class="eyebrow">Tools</p>
+                <h2 id="tools-heading">Admin Utilities</h2>
+              </div>
+              {% if test_alerts_enabled and not public_mode %}
+              <a href="/test-alerts">Test Alert Editor</a>
+              {% else %}
+              <span>Test tools hidden in this mode</span>
+              {% endif %}
+            </section>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

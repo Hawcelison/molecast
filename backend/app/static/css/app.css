@@ -1669,6 +1669,9 @@ table {
 
 .app-footer {
   background: var(--app-bg);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
   padding: 1rem;
 }
 
