@@ -17,32 +17,37 @@
 {% endblock %}
 
 {% block content %}
-<main id="dashboard">
-  <header class="dashboard-header">
-    <a class="dashboard-header__brand" href="/" aria-label="Molecast dashboard home">
-      <img
-        class="dashboard-header__logo"
-        src="/static/img/molecast-logo-header.png"
-        alt="Molecast"
-      >
+<main id="dashboard" class="dashboard-shell">
+  <aside class="dashboard-rail" aria-label="Dashboard navigation">
+    <a class="dashboard-rail__brand" href="/" aria-label="Molecast dashboard home">
+      <img src="/static/img/molecast-logo-header.png" alt="Molecast">
     </a>
+    <nav class="dashboard-rail__nav" aria-label="Dashboard sections">
+      <a class="dashboard-rail__link is-active" href="#dashboard-overview">Overview</a>
+      <a class="dashboard-rail__link" href="#map-panel">Map</a>
+      <a class="dashboard-rail__link" href="#alert-summary-counter">Alerts</a>
+      <a class="dashboard-rail__link" href="#location-editor-panel">Locations</a>
+      <a class="dashboard-rail__link" href="#dashboard-tools">Tools</a>
+    </nav>
+    <p class="dashboard-rail__mode">{{ "Public mode" if frontend_config.testAlerts.publicMode else "Local mode" }}</p>
+  </aside>
+
+  <div id="dashboard-overview" class="dashboard-workspace">
+    <header class="dashboard-header">
+      <div>
+        <p class="dashboard-eyebrow">Molecast Weather Operations</p>
+        <h1>Molecast Dashboard</h1>
+      </div>
+      <div id="alert-controls" class="alert-controls" aria-label="Alert controls"></div>
+    </header>
+
     <section class="active-location-bar" aria-labelledby="active-location-display">
       <div class="active-location-bar__main">
-        <p id="active-location-display" class="active-location-bar__title">Active Location: Loading</p>
+        <p class="dashboard-eyebrow">Active Location</p>
+        <h2 id="active-location-display" class="active-location-bar__title">Active Location: Loading</h2>
         <p id="location-metadata-status" class="active-location-bar__status">NWS metadata: checking</p>
       </div>
       <div class="active-location-bar__actions" aria-label="Location actions">
-        <label class="radar-refresh-toggle">
-          <input id="radar-auto-refresh-toggle" type="checkbox" checked>
-          <span>Radar auto-refresh</span>
-        </label>
-        <details id="layer-control-panel" class="layer-control-panel">
-          <summary class="layer-control-panel__summary">Layers</summary>
-          <div class="layer-control__menu">
-            <div id="layer-control-list" class="layer-control__list" aria-label="Map layer visibility"></div>
-            <button id="layer-control-reset" class="layer-control__reset" type="button">Reset Layers</button>
-          </div>
-        </details>
         <button
           id="location-editor-toggle"
           class="location-panel__button location-panel__button--primary"
@@ -58,112 +63,165 @@
         >Saved Locations</button>
       </div>
     </section>
-    <div id="alert-controls" class="alert-controls" aria-label="Alert controls"></div>
-  </header>
-  <section id="alert-summary-counter" class="alert-summary" aria-label="Alert counter" aria-live="polite"></section>
-  <div id="alert-banner-container" class="alert-banner-container" role="list" aria-live="polite"></div>
-  <section class="location-panel" aria-label="Active location editor">
-    <div id="location-editor-panel" class="location-editor" hidden>
-      <form id="location-editor-form" class="location-editor__form">
-        <div class="location-editor__search">
-          <label for="location-search">
-            Search ZIP, city, or address
-            <input
-              id="location-search"
-              name="location_search"
-              type="search"
-              maxlength="120"
-              autocomplete="off"
-              placeholder="Type ZIP, city/state, or street address"
-              role="combobox"
-              aria-autocomplete="list"
-              aria-expanded="false"
-              aria-controls="location-search-results"
-              aria-describedby="location-search-status"
-            >
-          </label>
-          <p id="location-search-status" class="location-editor__search-status" role="status" aria-live="polite">Select a location, then review and save.</p>
-          <div id="location-search-results" class="location-editor__suggestions" role="listbox" hidden></div>
-          <p id="location-selected-suggestion" class="location-editor__selected" hidden></p>
-          <div id="location-nws-preview" class="location-editor__nws-preview" role="status" aria-live="polite" hidden></div>
-          <div class="location-editor__pin-controls" aria-label="Map pin refinement">
-            <button id="location-place-pin" class="location-panel__button" type="button" aria-pressed="false">Pick from map</button>
-            <button id="location-use-map-center" class="location-panel__button" type="button">Use map center</button>
+
+    <div id="alert-banner-container" class="alert-banner-container" role="list" aria-live="polite"></div>
+
+    <section class="location-panel" aria-label="Active location editor">
+      <div id="location-editor-panel" class="location-editor" hidden>
+        <form id="location-editor-form" class="location-editor__form">
+          <div class="location-editor__search">
+            <label for="location-search">
+              Search ZIP, city, or address
+              <input
+                id="location-search"
+                name="location_search"
+                type="search"
+                maxlength="120"
+                autocomplete="off"
+                placeholder="Type ZIP, city/state, or street address"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                aria-controls="location-search-results"
+                aria-describedby="location-search-status"
+              >
+            </label>
+            <p id="location-search-status" class="location-editor__search-status" role="status" aria-live="polite">Select a location, then review and save.</p>
+            <div id="location-search-results" class="location-editor__suggestions" role="listbox" hidden></div>
+            <p id="location-selected-suggestion" class="location-editor__selected" hidden></p>
+            <div id="location-nws-preview" class="location-editor__nws-preview" role="status" aria-live="polite" hidden></div>
+            <div class="location-editor__pin-controls" aria-label="Map pin refinement">
+              <button id="location-place-pin" class="location-panel__button" type="button" aria-pressed="false">Pick from map</button>
+              <button id="location-use-map-center" class="location-panel__button" type="button">Use map center</button>
+            </div>
+            <p id="location-preview-pin-status" class="location-editor__pin-status" role="status" aria-live="polite" hidden></p>
           </div>
-          <p id="location-preview-pin-status" class="location-editor__pin-status" role="status" aria-live="polite" hidden></p>
+          <section class="location-editor__saved" aria-labelledby="location-saved-title" tabindex="-1">
+            <div class="location-editor__saved-header">
+              <h2 id="location-saved-title">Saved locations</h2>
+              <div class="location-editor__saved-actions">
+                <button id="location-save-draft" class="location-panel__button" type="button">Save to saved locations</button>
+                <button id="location-saved-refresh" class="location-panel__button" type="button">Refresh</button>
+              </div>
+            </div>
+            <p id="location-saved-status" class="location-editor__saved-status" role="status" aria-live="polite">Loading saved locations...</p>
+            <div id="location-saved-list" class="location-editor__saved-list" role="list"></div>
+          </section>
+          <div class="location-editor__grid">
+            <label>
+              Label
+              <input id="location-label" name="label" type="text" maxlength="120" autocomplete="off">
+            </label>
+            <label>
+              Name
+              <input id="location-name" name="name" type="text" maxlength="120" autocomplete="off">
+            </label>
+            <label>
+              Latitude
+              <input id="location-latitude" name="latitude" type="number" step="0.0001" min="-90" max="90" required>
+            </label>
+            <label>
+              Longitude
+              <input id="location-longitude" name="longitude" type="number" step="0.0001" min="-180" max="180" required>
+            </label>
+            <label>
+              City
+              <input id="location-city" name="city" type="text" maxlength="80" autocomplete="address-level2">
+            </label>
+            <label>
+              County
+              <input id="location-county" name="county" type="text" maxlength="80" autocomplete="off">
+            </label>
+            <label>
+              State
+              <input id="location-state" name="state" type="text" maxlength="2" autocomplete="address-level1">
+            </label>
+            <label>
+              ZIP code
+              <input id="location-zip-code" name="zip_code" type="text" inputmode="numeric" maxlength="10" autocomplete="postal-code">
+            </label>
+            <div class="location-editor__lookup">
+              <span class="location-editor__lookup-label">ZIP lookup</span>
+              <button id="location-zip-lookup" class="location-panel__button" type="button">Lookup ZIP</button>
+            </div>
+            <label>
+              Default zoom
+              <input id="location-default-zoom" name="default_zoom" type="number" step="1" min="3" max="14" required>
+            </label>
+          </div>
+          <p id="location-editor-message" class="location-editor__message" role="status" aria-live="polite"></p>
+          <div class="location-editor__actions">
+            <button id="location-editor-save" class="location-panel__button location-panel__button--primary" type="submit">Save location</button>
+            <button id="location-editor-cancel" class="location-panel__button" type="button">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="production-grid" aria-label="Weather dashboard">
+      <section id="map-panel" class="map-focus" aria-labelledby="map-heading">
+        <div class="map-focus__header">
+          <div>
+            <p class="dashboard-eyebrow">Radar and Alert Map</p>
+            <h2 id="map-heading">Primary Decision Surface</h2>
+          </div>
+          <div class="map-focus__controls" aria-label="Map and radar controls">
+            <label class="radar-refresh-toggle">
+              <input id="radar-auto-refresh-toggle" type="checkbox" checked>
+              <span>Radar auto-refresh</span>
+            </label>
+            <details id="layer-control-panel" class="layer-control-panel">
+              <summary class="layer-control-panel__summary">Layers</summary>
+              <div class="layer-control__menu">
+                <div id="layer-control-list" class="layer-control__list" aria-label="Map layer visibility"></div>
+                <button id="layer-control-reset" class="layer-control__reset" type="button">Reset Layers</button>
+              </div>
+            </details>
+          </div>
         </div>
-        <section class="location-editor__saved" aria-labelledby="location-saved-title" tabindex="-1">
-          <div class="location-editor__saved-header">
-            <h2 id="location-saved-title">Saved locations</h2>
-            <div class="location-editor__saved-actions">
-              <button id="location-save-draft" class="location-panel__button" type="button">Save to saved locations</button>
-              <button id="location-saved-refresh" class="location-panel__button" type="button">Refresh</button>
+        <div class="map-frame">
+          <div id="map" aria-label="Weather map"></div>
+        </div>
+      </section>
+
+      <aside class="dashboard-side-stack" aria-label="Dashboard supporting information">
+        <section id="alert-summary-counter" class="alert-summary" aria-label="Alert counter" aria-live="polite"></section>
+        <section class="dashboard-support-card" aria-labelledby="locations-card-heading">
+          <div class="dashboard-support-card__header">
+            <div>
+              <p class="dashboard-eyebrow">Locations</p>
+              <h2 id="locations-card-heading">Saved Location Tools</h2>
             </div>
           </div>
-          <p id="location-saved-status" class="location-editor__saved-status" role="status" aria-live="polite">Loading saved locations...</p>
-          <div id="location-saved-list" class="location-editor__saved-list" role="list"></div>
-        </section>
-        <div class="location-editor__grid">
-          <label>
-            Label
-            <input id="location-label" name="label" type="text" maxlength="120" autocomplete="off">
-          </label>
-          <label>
-            Name
-            <input id="location-name" name="name" type="text" maxlength="120" autocomplete="off">
-          </label>
-          <label>
-            Latitude
-            <input id="location-latitude" name="latitude" type="number" step="0.0001" min="-90" max="90" required>
-          </label>
-          <label>
-            Longitude
-            <input id="location-longitude" name="longitude" type="number" step="0.0001" min="-180" max="180" required>
-          </label>
-          <label>
-            City
-            <input id="location-city" name="city" type="text" maxlength="80" autocomplete="address-level2">
-          </label>
-          <label>
-            County
-            <input id="location-county" name="county" type="text" maxlength="80" autocomplete="off">
-          </label>
-          <label>
-            State
-            <input id="location-state" name="state" type="text" maxlength="2" autocomplete="address-level1">
-          </label>
-          <label>
-            ZIP code
-            <input id="location-zip-code" name="zip_code" type="text" inputmode="numeric" maxlength="10" autocomplete="postal-code">
-          </label>
-          <div class="location-editor__lookup">
-            <span class="location-editor__lookup-label">ZIP lookup</span>
-            <button id="location-zip-lookup" class="location-panel__button" type="button">Lookup ZIP</button>
+          <p>Open the editor to manage saved locations, preview NWS metadata, activate a saved location, or refine the pin on the map.</p>
+          <div class="dashboard-support-card__actions">
+            <button
+              class="location-panel__button location-panel__button--primary"
+              type="button"
+              aria-controls="location-editor-panel"
+              onclick="document.getElementById('location-editor-toggle')?.click()"
+            >Edit Location</button>
+            <button
+              class="location-panel__button"
+              type="button"
+              aria-controls="location-editor-panel"
+              onclick="document.getElementById('location-saved-locations-open')?.click()"
+            >Saved Locations</button>
           </div>
-          <label>
-            Default zoom
-            <input id="location-default-zoom" name="default_zoom" type="number" step="1" min="3" max="14" required>
-          </label>
-        </div>
-        <p id="location-editor-message" class="location-editor__message" role="status" aria-live="polite"></p>
-        <div class="location-editor__actions">
-          <button id="location-editor-save" class="location-panel__button location-panel__button--primary" type="submit">Save location</button>
-          <button id="location-editor-cancel" class="location-panel__button" type="button">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </section>
-  <section id="current-conditions"></section>
-  <section id="forecast"></section>
-  <section id="map-panel">
-    <div id="map" aria-label="Weather map"></div>
-  </section>
-  <section id="radar"></section>
-  <footer class="app-footer">
-    {% if frontend_config.testAlerts.enabled %}
-    <a href="/test-alerts">Test Alert Editor</a>
-    {% endif %}
-    <a href="/mockups/codex-ui-1">Codex UI: 1</a>
-  </footer>
+        </section>
+        <section id="current-conditions" class="dashboard-support-card"></section>
+        <section id="forecast" class="dashboard-support-card"></section>
+      </aside>
+    </section>
+
+    <section id="radar"></section>
+
+    <footer id="dashboard-tools" class="app-footer">
+      {% if frontend_config.testAlerts.enabled %}
+      <a href="/test-alerts">Test Alert Editor</a>
+      {% endif %}
+      <a class="app-footer__secondary" href="/mockups/codex-ui-1">Codex UI: 1 prototype reference</a>
+    </footer>
+  </div>
 </main>
 {% endblock %}

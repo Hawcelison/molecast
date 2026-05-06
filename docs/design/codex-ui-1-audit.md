@@ -96,3 +96,14 @@ The prototype explores a modern operations dashboard shell without replacing pro
 - Saved locations and alert summary move into a supporting side stack.
 - Test alert tooling is visually secondary and respects public-mode visibility in the mockup.
 - Mobile layout collapses to one column with full-width touch targets and no intentional horizontal overflow.
+
+## Production Integration Notes
+
+The approved Codex UI: 1 direction was applied to the production dashboard at `/` without replacing the live dashboard with static mockup content.
+
+- The dashboard now uses a production shell with a navigation rail, compact workspace header, prominent active-location panel, high-priority alert banner region, primary map/radar focus panel, and a supporting side stack for alert summary and location tools.
+- Existing production DOM hooks were preserved for active location, alert banners, alert summary scope switching, saved alert drilldown, map/radar rendering, radar auto-refresh, layer controls, alert polygons, county boundaries, and the location editor workflows.
+- Layer controls and radar auto-refresh moved from the global active-location header into the map panel so they are discoverable near the map they control.
+- The saved-location editor remains the existing functional editor instead of a static monitor list; the production layout exposes it through prominent location actions and a secondary location tools card.
+- The non-production `/mockups/codex-ui-1` page remains available as a clearly marked prototype reference.
+- The `Codex UI: 1` footer link was de-emphasized as a prototype reference because the design direction is now represented in production.
